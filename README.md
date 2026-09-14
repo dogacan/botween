@@ -52,9 +52,15 @@ python3 skeleton.py --mode auto
 * `--preview`: Opens an OpenCV window showing the skeleton's live camera view.
 * `--no-camera`: Runs audio-only (no webcam snapshot).
 
+## 🎭 Customizing the Skeleton Persona & Prompt
+
+The skeleton's personality, costume observation instructions, jokes, and response rules are in **[`prompt.md`](prompt.md)**.
+* You can freely edit this file in your favorite text editor to tweak its personality, add custom jokes, or adjust costume reactions.
+* **Live Reload**: `skeleton.py` re-reads `prompt.md` on every interaction, so you can edit the prompt while the script is running without restarting!
+
 ---
 
-## 🎛️ Customizing the Voice & Atmosphere
+## 🎛️ Customizing Voice & Hardware
 
 You can adjust all voice and sound parameters in `.env`:
 * **Voice**: `TTS_VOICE=en-US-ChristopherNeural` (or try `en-US-GuyNeural`, `en-GB-RyanNeural`, `en-US-JennyNeural`).

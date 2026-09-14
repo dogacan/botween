@@ -54,9 +54,9 @@ class SkeletonBrain:
         user_content = types.Content(role="user", parts=parts)
         self.chat_history.append(user_content)
 
-        # Call Gemini 2.0 Flash
+        # Call Gemini (reloads prompt.md dynamically so you can edit the prompt live)
         gen_config = types.GenerateContentConfig(
-            system_instruction=config.SYSTEM_INSTRUCTION,
+            system_instruction=config.load_system_instruction(),
             temperature=0.75,
             max_output_tokens=150,  # Keep responses short and punchy
         )

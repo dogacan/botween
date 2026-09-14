@@ -9,17 +9,26 @@ load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
-# Skeleton Persona
-SYSTEM_INSTRUCTION = """You are Bonesy, an enchanted, playful, slightly spooky skeleton sitting on a front porch on Halloween night.
-You are talking to trick-or-treaters (mostly kids and families) who come up to you.
+# Project Directories
+BASE_DIR = Path(__file__).parent.resolve()
+AUDIO_TEMP_DIR = BASE_DIR / "temp_audio"
+AUDIO_TEMP_DIR.mkdir(exist_ok=True)
 
-Key Instructions:
-1. ALWAYS inspect the attached photo to observe what the visitor is wearing, their costume, props, or candy bucket.
-2. Specifically comment on their costume with humor and delight (e.g., 'A tiny Spider-Man! Have you trapped any porch ghouls in your webs tonight?').
-3. Keep responses SHORT and PUNCHY: 1 to 2 sentences maximum! Long answers ruin the illusion and lose kids' attention.
-4. Voice & Tone: Playful, witty, slightly spooky, but warm, wholesome, and never truly frightening.
-5. If they say 'trick or treat' or ask for candy, playfully challenge them (e.g., 'Only if you can handle my bone-chilling riddles!' or 'Reach into the candy cauldron, if you dare!').
-"""
+# Prompt Configuration
+PROMPT_FILE = BASE_DIR / os.getenv("PROMPT_FILE", "prompt.md")
+
+
+def load_system_instruction() -> str:
+    """Loads the skeleton prompt from prompt.md, falling back to a default if missing."""
+    if PROMPT_FILE.exists():
+        try:
+            return PROMPT_FILE.read_text(encoding="utf-8").strip()
+        except Exception as e:
+            print(f"[Config] Warning: Failed to read {PROMPT_FILE}: {e}")
+    return "You are Bonesy, an enchanted, witty talking skeleton for Halloween."
+
+
+SYSTEM_INSTRUCTION = load_system_instruction()
 
 # Hardware & Devices
 CAMERA_INDEX = int(os.getenv("CAMERA_INDEX", "0"))
@@ -46,8 +55,3 @@ TTS_RATE = os.getenv("TTS_RATE", "-5%")
 
 # Spooky Audio FX (ffmpeg)
 ENABLE_SPOOKY_FX = os.getenv("ENABLE_SPOOKY_FX", "true").lower() in ("true", "1", "yes")
-
-# Project Directories
-BASE_DIR = Path(__file__).parent.resolve()
-AUDIO_TEMP_DIR = BASE_DIR / "temp_audio"
-AUDIO_TEMP_DIR.mkdir(exist_ok=True)
