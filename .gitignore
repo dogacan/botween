@@ -1,0 +1,26 @@
+# Environment & Secrets
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+
+# Temporary audio and camera snapshots
+temp_audio/
+*.mp3
+*.wav
+*.jpg
+*.jpeg
+*.png
+test_snapshot.jpg
+
+# macOS
+.DS_Store
