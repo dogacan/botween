@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -33,10 +34,41 @@ def stop_speaking():
     _is_speaking_event.clear()
 
 
-async def generate_speech_file(text: str, output_path: Path) -> Path:
+def strip_stage_tags(text: str) -> str:
+    """Strips <whisper>, <cackle>, etc. so fallback TTS engines don't read them aloud."""
+    cleaned = re.sub(r"</?[a-zA-Z_\-]+>", " ", text)
+    return " ".join(cleaned.split())
+
+
+def generate_gemini_speech(text: str, output_path: Path) -> Path:
+    """Generates expressive speech with stage directions using Gemini TTS (e.g. 3.8 Flash-Lite TTS)."""
+    from google import genai
+
+    client = genai.Client(api_key=config.GEMINI_API_KEY)
+    resp = client.models.generate_content(
+        model=config.GEMINI_TTS_MODEL,
+        contents=text,
+    )
+
+    audio_data = None
+    if resp.candidates and resp.candidates[0].content and resp.candidates[0].content.parts:
+        for part in resp.candidates[0].content.parts:
+            if part.inline_data and part.inline_data.data:
+                audio_data = part.inline_data.data
+                break
+
+    if not audio_data:
+        raise ValueError(f"No inline audio data returned from {config.GEMINI_TTS_MODEL}")
+
+    output_path.write_bytes(audio_data)
+    return output_path
+
+
+async def generate_edge_speech(text: str, output_path: Path) -> Path:
     """Uses edge-tts to generate a spoken audio file."""
+    clean_text = strip_stage_tags(text)
     communicate = edge_tts.Communicate(
-        text=text,
+        text=clean_text,
         voice=config.TTS_VOICE,
         pitch=config.TTS_PITCH,
         rate=config.TTS_RATE,
@@ -50,15 +82,12 @@ def apply_spooky_effects(input_file: Path, output_file: Path) -> Path:
     Applies ffmpeg audio filters:
     - aecho: Multi-tap reverb simulating a hollow crypt chamber
     - bass boost: Enhances deep chest-cavity resonance
-    - slight treble rolloff: Softens robotic edge
+    - slight treble rolloff: Softens harsh highs
     """
     ffmpeg_bin = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
     if not os.path.exists(ffmpeg_bin):
-        # If ffmpeg is not found, keep original audio
         return input_file
 
-    # aecho parameters: in_gain:out_gain:delays:decays
-    # 60ms delay + 120ms delay gives a hollow cavernous/stone crypt reverberation
     filter_chain = (
         "aecho=0.8:0.75:60|120:0.3|0.15,"
         "bass=g=5:f=120,"
@@ -79,7 +108,7 @@ def apply_spooky_effects(input_file: Path, output_file: Path) -> Path:
         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
         return output_file
     except Exception as e:
-        print(f"[TTS] Warning: ffmpeg FX filter failed ({e}), using raw TTS audio.")
+        print(f"[TTS] Warning: ffmpeg FX filter failed ({e}), using raw audio.")
         return input_file
 
 
@@ -104,7 +133,7 @@ def play_audio_file(file_path: Path, block: bool = True):
         finally:
             with _player_lock:
                 _current_player_process = None
-            # Brief 300ms tail delay before releasing mute to allow acoustic reflections to dissipate
+            # Brief 300ms tail delay before releasing mute
             time.sleep(0.3)
             _is_speaking_event.clear()
 
@@ -117,17 +146,28 @@ def play_audio_file(file_path: Path, block: bool = True):
 
 
 def speak(text: str, block: bool = True):
-    """Full pipeline: generates TTS, applies spooky FX, and plays the audio."""
+    """Full pipeline: generates expressive TTS (Gemini or Edge), applies spooky FX, and plays audio."""
     if not text.strip():
         return
 
     timestamp = int(time.time() * 1000)
-    raw_file = config.AUDIO_TEMP_DIR / f"tts_raw_{timestamp}.mp3"
+    raw_file = config.AUDIO_TEMP_DIR / f"tts_raw_{timestamp}.wav"
     fx_file = config.AUDIO_TEMP_DIR / f"tts_fx_{timestamp}.mp3"
 
     try:
-        # Run async edge-tts generation
-        asyncio.run(generate_speech_file(text, raw_file))
+        used_gemini = False
+        if config.TTS_ENGINE == "gemini" and config.GEMINI_API_KEY:
+            try:
+                print(f"[TTS] Generating expressive voice via {config.GEMINI_TTS_MODEL}...")
+                generate_gemini_speech(text, raw_file)
+                used_gemini = True
+            except Exception as e:
+                print(f"[TTS] Warning: Gemini TTS failed ({e}), falling back to Edge-TTS...")
+
+        if not used_gemini:
+            edge_file = config.AUDIO_TEMP_DIR / f"tts_raw_{timestamp}.mp3"
+            asyncio.run(generate_edge_speech(text, edge_file))
+            raw_file = edge_file
 
         if config.ENABLE_SPOOKY_FX:
             final_audio = apply_spooky_effects(raw_file, fx_file)
@@ -136,7 +176,6 @@ def speak(text: str, block: bool = True):
 
         play_audio_file(final_audio, block=block)
     finally:
-        # Cleanup temp audio files
         for f in (raw_file, fx_file):
             if f.exists():
                 try:

@@ -7,7 +7,11 @@ load_dotenv()
 
 # Gemini Configuration
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+
+# TTS Engine Configuration ("gemini" or "edge")
+TTS_ENGINE = os.getenv("TTS_ENGINE", "gemini").lower()
+GEMINI_TTS_MODEL = os.getenv("GEMINI_TTS_MODEL", "gemini-3.8-flash-lite-tts")
 
 # Project Directories
 BASE_DIR = Path(__file__).parent.resolve()

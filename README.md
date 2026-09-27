@@ -52,19 +52,24 @@ python3 skeleton.py --mode auto
 * `--preview`: Opens an OpenCV window showing the skeleton's live camera view.
 * `--no-camera`: Runs audio-only (no webcam snapshot).
 
-## 🎭 Customizing the Skeleton Persona & Prompt
+## 🎭 Customizing the Skeleton Persona & Stage Directions
 
-The skeleton's personality, costume observation instructions, jokes, and response rules are in **[`prompt.md`](prompt.md)**.
-* You can freely edit this file in your favorite text editor to tweak its personality, add custom jokes, or adjust costume reactions.
+The skeleton's personality, costume observation instructions, jokes, and stage directions are in **[`prompt.md`](prompt.md)**.
+* **Stage Direction Cues**: Bonesy uses inline theatrical tags that the voice engine acts out:
+  * `<gasp>`: A sharp, audible gasp upon seeing a visitor or costume.
+  * `<whisper> ... </whisper>`: Leaning in close to whisper secrets or riddles.
+  * `<cackle>` or `<laugh>`: Wicked cackling and raspy skeleton giggles.
+  * `<pause>`: Theatrical comedic timing before punchlines.
 * **Live Reload**: `skeleton.py` re-reads `prompt.md` on every interaction, so you can edit the prompt while the script is running without restarting!
 
 ---
 
-## 🎛️ Customizing Voice & Hardware
+## 🎛️ Customizing Models & Voice
 
-You can adjust all voice and sound parameters in `.env`:
-* **Voice**: `TTS_VOICE=en-US-ChristopherNeural` (or try `en-US-GuyNeural`, `en-GB-RyanNeural`, `en-US-JennyNeural`).
-* **Pitch**: `TTS_PITCH=-15Hz` or `-25Hz` for a deeper, more ominous crypt voice.
-* **Speed**: `TTS_RATE=-5%` or `-10%` for slower, deliberate pacing.
-* **Spooky FX**: `ENABLE_SPOOKY_FX=true` applies FFmpeg's `aecho` and low-frequency resonance filters.
+You can adjust all model and sound parameters in `.env`:
+* **Brain Model**: `GEMINI_MODEL=gemini-3.8-flash` (or `gemini-3.5-flash-lite` for ultra-fast token replies).
+* **TTS Engine**: `TTS_ENGINE=gemini` (default, uses native expressive acting) or `edge` (offline Microsoft neural voice).
+* **Gemini Voice Model**: `GEMINI_TTS_MODEL=gemini-3.8-flash-lite-tts` (fast & economical) or `gemini-3.8-flash-tts` (studio grade).
+* **Spooky FX**: `ENABLE_SPOOKY_FX=true` applies FFmpeg's `aecho` and low-frequency resonance filters on top of the voice.
+* **Edge-TTS Fallback**: `TTS_VOICE=en-US-ChristopherNeural`, `TTS_PITCH=-15Hz`, `TTS_RATE=-5%`.
 * **Sensitivity**: Adjust `VAD_ENERGY_THRESHOLD=0.03` if your environment is noisy (traffic, wind).
