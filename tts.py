@@ -40,14 +40,31 @@ def strip_stage_tags(text: str) -> str:
     return " ".join(cleaned.split())
 
 
-def generate_gemini_speech(text: str, output_path: Path) -> Path:
-    """Generates expressive speech with stage directions using Gemini TTS (e.g. 3.8 Flash-Lite TTS)."""
+def generate_gemini_speech(text: str, output_path: Path, voice_name: str = None) -> Path:
+    """Generates expressive speech with stage directions using a locked Gemini prebuilt voice."""
     from google import genai
+    from google.genai import types
 
+    chosen_voice = voice_name or config.GEMINI_VOICE_NAME
     client = genai.Client(api_key=config.GEMINI_API_KEY)
+
+    # Explicitly lock the voice identity across all calls
+    speech_config = types.SpeechConfig(
+        voice_config=types.VoiceConfig(
+            prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                voice_name=chosen_voice
+            )
+        )
+    )
+    gen_config = types.GenerateContentConfig(
+        response_modalities=["AUDIO"],
+        speech_config=speech_config,
+    )
+
     resp = client.models.generate_content(
         model=config.GEMINI_TTS_MODEL,
         contents=text,
+        config=gen_config,
     )
 
     audio_data = None
@@ -158,7 +175,7 @@ def speak(text: str, block: bool = True):
         used_gemini = False
         if config.TTS_ENGINE == "gemini" and config.GEMINI_API_KEY:
             try:
-                print(f"[TTS] Generating expressive voice via {config.GEMINI_TTS_MODEL}...")
+                print(f"[TTS] Generating expressive voice via {config.GEMINI_TTS_MODEL} [Voice: {config.GEMINI_VOICE_NAME}]...")
                 generate_gemini_speech(text, raw_file)
                 used_gemini = True
             except Exception as e:

@@ -11,11 +11,16 @@ from audio import AudioListener
 from camera import Camera
 
 
-def test_spooky_tts():
+def test_spooky_tts(voice_override=None):
     print("\n--- 1. Testing Spooky TTS Voice ---")
-    phrase = "Mwahahaha! Welcome to the front yard of doom! Your costume looks delightfully spooky!"
+    if voice_override:
+        config.GEMINI_VOICE_NAME = voice_override
+    phrase = "<gasp> Mwahahaha! <whisper> Welcome to the front yard of doom! </whisper> <cackle> Your costume looks delightfully spooky! </cackle>"
     print(f"Speaking: '{phrase}'")
-    print(f"Voice: {config.TTS_VOICE} | Pitch: {config.TTS_PITCH} | FX: {config.ENABLE_SPOOKY_FX}")
+    if config.TTS_ENGINE == "gemini":
+        print(f"Engine: Gemini ({config.GEMINI_TTS_MODEL}) | Locked Voice: {config.GEMINI_VOICE_NAME} | FX: {config.ENABLE_SPOOKY_FX}")
+    else:
+        print(f"Engine: Edge-TTS | Voice: {config.TTS_VOICE} | Pitch: {config.TTS_PITCH} | FX: {config.ENABLE_SPOOKY_FX}")
     start_t = time.time()
     tts.speak(phrase, block=True)
     print(f"Speech playback finished in {time.time() - start_t:.2f}s.")
@@ -73,13 +78,20 @@ def test_camera():
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Botween Hardware & Audio Diagnostic")
+    parser.add_argument("--voice", type=str, default=None, help="Test a specific Gemini voice (e.g. Puck, Charon, Fenrir, Kore)")
+    parser.add_argument("--tts-only", action="store_true", help="Only test voice playback without mic/camera")
+    args = parser.parse_args()
+
     print("==========================================")
     print("   Botween Hardware & Audio Diagnostic   ")
     print("==========================================")
 
-    test_spooky_tts()
-    test_microphone()
-    test_camera()
+    test_spooky_tts(voice_override=args.voice)
+    if not args.tts_only:
+        test_microphone()
+        test_camera()
 
     print("\n==========================================")
     print("Diagnostic complete!")

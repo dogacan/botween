@@ -82,7 +82,8 @@ def run_skeleton(mode: str = "auto", show_preview: bool = False, no_camera: bool
     print("=" * 60)
     print("      💀 BONESY THE TALKING SKELETON - BOTWEEN 🎃")
     print("=" * 60)
-    print(f"Mode: {mode.upper()} | Voice: {config.TTS_VOICE} | FX: {config.ENABLE_SPOOKY_FX}")
+    voice_info = f"Gemini ({config.GEMINI_VOICE_NAME})" if config.TTS_ENGINE == "gemini" else config.TTS_VOICE
+    print(f"Mode: {mode.upper()} | Engine: {config.TTS_ENGINE.upper()} | Voice: {voice_info} | FX: {config.ENABLE_SPOOKY_FX}")
 
     if not config.GEMINI_API_KEY:
         print("\n❌ Error: GEMINI_API_KEY is not configured!")
@@ -105,7 +106,7 @@ def run_skeleton(mode: str = "auto", show_preview: bool = False, no_camera: bool
 
     # Initial spooky awakening
     print("\n[Skeleton] Bonesy is awakening...")
-    tts.speak("Hehehe! The bones are alive! Who approaches my porch on this dark night?", block=True)
+    tts.speak("<cackle> Hehehe! </cackle> The bones are alive! <whisper> Who approaches my porch on this dark night? </whisper>", block=True)
     print("[Skeleton] Ready for trick-or-treaters!\n")
 
     try:

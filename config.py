@@ -12,6 +12,9 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 # TTS Engine Configuration ("gemini" or "edge")
 TTS_ENGINE = os.getenv("TTS_ENGINE", "gemini").lower()
 GEMINI_TTS_MODEL = os.getenv("GEMINI_TTS_MODEL", "gemini-3.8-flash-lite-tts")
+# Locked Prebuilt Voice (e.g. Puck, Charon, Fenrir, Orus, Kore, Zephyr)
+# "Puck" is mischievous & raspy (ideal for a witty skeleton); "Charon" is deep & ominous
+GEMINI_VOICE_NAME = os.getenv("GEMINI_VOICE_NAME", "Puck")
 
 # Project Directories
 BASE_DIR = Path(__file__).parent.resolve()
