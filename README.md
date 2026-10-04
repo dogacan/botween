@@ -49,8 +49,8 @@ python3 skeleton.py --mode auto
 ```
 
 ### Extra Flags
-* `--preview`: Opens an OpenCV window showing the skeleton's live camera view.
-* `--no-camera`: Runs audio-only (no webcam snapshot).
+* `--preview`: Opens a window with the **live camera feed on the left** and the **exact JPEG last sent to Gemini on the right** (with its resolution, size, and age), plus a status line (Listening / Thinking / Speaking). Press `Q` or `ESC` in the window to close it; Bonesy keeps running. Ctrl+C in the terminal quits everything.
+* `--no-camera`: Runs audio-only (no webcam snapshot). Cannot be combined with `--preview`.
 
 ## 🎭 Customizing the Skeleton Persona & Stage Directions
 

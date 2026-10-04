@@ -1,14 +1,15 @@
 import argparse
 import sys
+import threading
 import time
 from typing import List, Optional
-import cv2
 from google import genai
 from google.genai import types
 
 import config
 from audio import AudioListener
 from camera import Camera
+from preview import Preview
 import tts
 
 
@@ -78,6 +79,61 @@ class SkeletonBrain:
         return reply_text
 
 
+def interaction_loop(mode, brain, listener, cam, preview, stop_event):
+    """Listen -> snapshot -> Gemini -> speak. Runs on a worker thread when the preview window is open."""
+
+    def status(text):
+        if preview:
+            preview.set_status(text)
+
+    try:
+        while not stop_event.is_set():
+            audio_bytes = None
+
+            if mode == "manual":
+                status("Waiting for ENTER (manual mode)")
+                input("\n[Manual Mode] Press [ENTER] when you are ready to speak...")
+                print("[Audio] Recording for up to 8 seconds or until silence...")
+                status("Listening...")
+                audio_bytes = listener.listen_for_speech()
+            else:
+                # Autonomous VAD loop
+                status("Listening for trick-or-treaters...")
+                audio_bytes = listener.listen_for_speech()
+
+            if not audio_bytes:
+                continue
+
+            # Grab current camera snapshot
+            image_bytes = None
+            if cam:
+                image_bytes = cam.get_latest_jpeg_bytes()
+                if image_bytes:
+                    print(f"[Camera] Captured visitor snapshot ({len(image_bytes) // 1024} KB).")
+                    if preview:
+                        preview.update_sent(image_bytes)  # exactly what the model will see
+
+            print("[Brain] Thinking and inspecting visitor...")
+            status("Thinking...")
+            start_t = time.time()
+            try:
+                reply = brain.generate_response(audio_bytes=audio_bytes, image_bytes=image_bytes)
+                latency = time.time() - start_t
+                print(f"[Brain] Response in {latency:.2f}s: \"{reply}\"")
+
+                print("[TTS] Speaking to trick-or-treater...")
+                status("Speaking...")
+                tts.speak(reply, block=True)
+            except Exception as e:
+                print(f"[Brain] Error generating response: {e}")
+                status("Error - recovering")
+                tts.speak("My old bones are rattling! Say that again, traveller!", block=True)
+    except (KeyboardInterrupt, EOFError):
+        pass
+    finally:
+        stop_event.set()  # make sure the GUI loop (if any) exits too
+
+
 def run_skeleton(mode: str = "auto", show_preview: bool = False, no_camera: bool = False):
     print("=" * 60)
     print("      💀 BONESY THE TALKING SKELETON - BOTWEEN 🎃")
@@ -92,6 +148,10 @@ def run_skeleton(mode: str = "auto", show_preview: bool = False, no_camera: bool
         print("  nano .env\n")
         sys.exit(1)
 
+    if show_preview and no_camera:
+        print("[Preview] --preview requires a camera; ignoring because --no-camera was set.")
+        show_preview = False
+
     brain = SkeletonBrain(config.GEMINI_API_KEY)
     listener = AudioListener()
 
@@ -104,59 +164,33 @@ def run_skeleton(mode: str = "auto", show_preview: bool = False, no_camera: bool
         cam = Camera()
         cam.start()
 
+    preview = Preview(cam) if (show_preview and cam) else None
+    stop_event = threading.Event()
+
     # Initial spooky awakening
     print("\n[Skeleton] Bonesy is awakening...")
     tts.speak("<cackle> Hehehe! </cackle> The bones are alive! <whisper> Who approaches my porch on this dark night? </whisper>", block=True)
     print("[Skeleton] Ready for trick-or-treaters!\n")
 
     try:
-        while True:
-            if show_preview and cam and cam.latest_frame is not None:
-                cv2.imshow("Skeleton Eye View (Press Q in window to hide)", cam.latest_frame)
-                if cv2.waitKey(1) & 0xFF == ord("q"):
-                    show_preview = False
-                    cv2.destroyAllWindows()
-
-            audio_bytes = None
-
-            if mode == "manual":
-                input("\n[Manual Mode] Press [ENTER] when you are ready to speak...")
-                print("[Audio] Recording for up to 8 seconds or until silence...")
-                audio_bytes = listener.listen_for_speech()
-            else:
-                # Autonomous VAD loop
-                audio_bytes = listener.listen_for_speech()
-
-            if not audio_bytes:
-                continue
-
-            # Grab current camera snapshot
-            image_bytes = None
-            if cam:
-                image_bytes = cam.get_latest_jpeg_bytes()
-                if image_bytes:
-                    print(f"[Camera] Captured visitor snapshot ({len(image_bytes) // 1024} KB).")
-
-            print("[Brain] Thinking and inspecting visitor...")
-            start_t = time.time()
-            try:
-                reply = brain.generate_response(audio_bytes=audio_bytes, image_bytes=image_bytes)
-                latency = time.time() - start_t
-                print(f"[Brain] Response in {latency:.2f}s: \"{reply}\"")
-
-                print("[TTS] Speaking to trick-or-treater...")
-                tts.speak(reply, block=True)
-            except Exception as e:
-                print(f"[Brain] Error generating response: {e}")
-                tts.speak("My old bones are rattling! Say that again, traveller!", block=True)
-
+        if preview:
+            # GUI must own the main thread on macOS; conversation runs in a worker.
+            worker = threading.Thread(
+                target=interaction_loop,
+                args=(mode, brain, listener, cam, preview, stop_event),
+                daemon=True,
+            )
+            worker.start()
+            preview.run(stop_event)
+        else:
+            interaction_loop(mode, brain, listener, cam, None, stop_event)
     except KeyboardInterrupt:
-        print("\n[Skeleton] Powering down. Happy Halloween!")
+        pass
     finally:
+        stop_event.set()
+        print("\n[Skeleton] Powering down. Happy Halloween!")
         if cam:
             cam.stop()
-        if show_preview:
-            cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
@@ -170,7 +204,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--preview",
         action="store_true",
-        help="Display live camera window on desktop.",
+        help="Open a window showing the live camera feed next to the exact frame last sent to Gemini.",
     )
     parser.add_argument(
         "--no-camera",
