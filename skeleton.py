@@ -14,7 +14,7 @@ import tts
 
 
 class SkeletonBrain:
-    """Manages Gemini 2.0 Flash interaction and conversation memory."""
+    """Manages Gemini (config.GEMINI_MODEL) interaction and conversation memory."""
 
     def __init__(self, api_key: str):
         if not api_key:
@@ -35,7 +35,7 @@ class SkeletonBrain:
         self.last_interaction_time = now
 
     def generate_response(self, audio_bytes: bytes, image_bytes: Optional[bytes] = None) -> str:
-        """Sends the audio utterance and latest camera image to Gemini 2.0 Flash."""
+        """Sends the audio utterance and latest camera image to Gemini."""
         self._check_session_timeout()
 
         parts = []

@@ -2,7 +2,7 @@
 
 An AI-powered, interactive talking skeleton prop designed for Halloween trick-or-treaters. 
 
-Botween uses your webcam to inspect trick-or-treaters' costumes, listens to what they say via microphone with Voice Activity Detection (VAD), sends the image and audio directly into **Gemini 2.0 Flash**, and speaks back in a spooky, kid-friendly voice with crypt reverb using **Edge-TTS** and **FFmpeg**.
+Botween uses your webcam to inspect trick-or-treaters' costumes, listens to what they say via microphone with Voice Activity Detection (VAD), sends the image and audio directly into **Gemini** (`gemini-3.8-flash` by default), and speaks back in a spooky, kid-friendly voice using **Gemini expressive TTS** (or **Edge-TTS** as a fallback) with crypt reverb from **FFmpeg**.
 
 ---
 
