@@ -62,3 +62,30 @@ TTS_RATE = os.getenv("TTS_RATE", "-5%")
 
 # Spooky Audio FX (ffmpeg)
 ENABLE_SPOOKY_FX = os.getenv("ENABLE_SPOOKY_FX", "true").lower() in ("true", "1", "yes")
+
+
+def _env_bool(name: str, default: str) -> bool:
+    return os.getenv(name, default).strip().lower() in ("true", "1", "yes")
+
+
+# Conversation engine: "live" streams audio/video through the Gemini Live API (low latency);
+# "classic" is the record -> generate_content -> TTS -> afplay pipeline.
+ENGINE = os.getenv("ENGINE", "live").strip().lower()
+
+# Gemini Live API
+GEMINI_LIVE_MODEL = os.getenv("GEMINI_LIVE_MODEL", "gemini-3.8-live")
+LIVE_VIDEO_FPS = float(os.getenv("LIVE_VIDEO_FPS", "1.0"))          # Live API accepts at most 1 frame/s
+LIVE_VIDEO_MAX_DIM = int(os.getenv("LIVE_VIDEO_MAX_DIM", "768"))    # smaller frames = fewer tokens
+LIVE_IDLE_TIMEOUT_SEC = float(os.getenv("LIVE_IDLE_TIMEOUT_SEC", "25"))  # close session -> next visitor
+LIVE_END_SILENCE_MS = int(os.getenv("LIVE_END_SILENCE_MS", "800"))  # server VAD: silence that ends a turn
+LIVE_ECHO_TAIL_SEC = float(os.getenv("LIVE_ECHO_TAIL_SEC", "0.6"))  # keep mic muted after speech (BT delay)
+LIVE_BARGE_IN = _env_bool("LIVE_BARGE_IN", "false")                 # let visitors interrupt (needs no echo!)
+LIVE_KEEPALIVE_LEVEL = float(os.getenv("LIVE_KEEPALIVE_LEVEL", "0.001"))  # faint noise keeps BT speaker awake
+
+# Ultra Skelly hardware
+SKELLY_BLE_ENABLED = _env_bool("SKELLY_BLE_ENABLED", "true")
+SKELLY_BLE_ADDRESS = os.getenv("SKELLY_BLE_ADDRESS", "").strip()    # optional; macOS uses UUIDs, not MACs
+SKELLY_BLE_NAME = os.getenv("SKELLY_BLE_NAME", "").strip()          # optional name hint, e.g. "Ultra Skelly v2"
+SKELLY_VOLUME = os.getenv("SKELLY_VOLUME", "").strip()              # optional 0-255, set at startup
+# Output device for the voice (substring match). Falls back to the system default if not found.
+SKELLY_AUDIO_OUTPUT = os.getenv("SKELLY_AUDIO_OUTPUT", "Skelly").strip()

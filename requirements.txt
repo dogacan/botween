@@ -5,3 +5,4 @@ opencv-python>=4.13.0
 pillow>=12.2.0
 python-dotenv>=1.2.3
 numpy>=2.0.0
+bleak>=1.0

@@ -34,6 +34,48 @@ This will:
 
 ---
 
+## 💀 Ultra Skelly + Gemini Live (default engine)
+
+By default Bonesy uses the **Gemini Live API** (`gemini-3.8-live`): mic audio and camera frames stream in, and his voice streams back about a second after a visitor stops talking. The voice goes to the Home Depot 6.5 ft **Ultra Skelly**'s own speaker, which moves the jaw in time with the audio.
+
+The skeleton has two Bluetooth radios:
+* **Control link (BLE)**, advertised as `Ultra Skelly v2` (or `Animated Skelly` on old firmware). `skelly_ble.py` uses it to turn on live mode, set the volume, change the eye/torso light color and trigger movements.
+* **Live speaker (classic Bluetooth)**, `Ultra Skelly v2(Live)`, PIN `1234`. It only appears after live mode is turned on.
+
+### One-time setup
+1. `pip3 install -r requirements.txt` (adds `bleak`).
+2. Power on the skeleton, switch it to Bluetooth mode, and **close the phone app** (only one controller can connect at a time).
+3. From your own Terminal, run `python3 skelly_ble.py scan`. macOS will ask for Bluetooth permission the first time; allow it.
+4. `python3 skelly_ble.py live` turns on the live speaker. Then go to **System Settings → Bluetooth** and connect `Ultra Skelly v2(Live)` (PIN `1234`).
+   *Optional:* `brew install blueutil` lets Bonesy reconnect the speaker automatically on later runs.
+
+### Run
+```bash
+python3 skeleton.py              # live engine, hands-free
+python3 skeleton.py --preview    # plus the camera preview window
+python3 skeleton.py --engine classic   # the original record → generate → TTS pipeline
+```
+On startup Bonesy connects to the skeleton over BLE, turns on live mode, finds the `Skelly` audio output (falling back to the system default), and says an awakening line. When the mic hears a voice he opens a Live session, including the second of audio from just before the trigger. The session closes after `LIVE_IDLE_TIMEOUT_SEC` of quiet, so each visitor gets a fresh conversation.
+
+### Hardware controls from the terminal
+```bash
+python3 skelly_ble.py volume 200     # 0-255
+python3 skelly_ble.py eyes red       # head light: red/orange/yellow/green/blue/cyan/purple/pink/white or #RRGGBB
+python3 skelly_ble.py torso purple
+python3 skelly_ble.py move all       # head / arm / torso / all
+```
+While talking, Gemini can also call `change_eye_color` and `move` itself for dramatic effect.
+
+### Live tuning (`.env`)
+* `LIVE_END_SILENCE_MS` (default 800): how long a pause ends the visitor's turn. Lower is snappier but may cut kids off.
+* `LIVE_ECHO_TAIL_SEC` (default 0.6): the mic stays muted this long after Bonesy stops, so he doesn't hear himself through the Bluetooth delay.
+* `LIVE_BARGE_IN=true` lets visitors interrupt him. Only enable it if the mic can't hear the skeleton's speaker.
+* `LIVE_KEEPALIVE_LEVEL` (default 0.001): faint noise between replies so the speaker doesn't clip his first word. Set it to 0 if you can hear it.
+* Stage tags in `prompt.md` (`<cackle>` etc.) are acted out by the Live voice directly. They still show up in the printed transcript, but he doesn't say them.
+* Use a wired or USB mic, not a Bluetooth one. Bluetooth mics switch macOS into low-quality headset mode.
+
+---
+
 ## 🏃‍♂️ Running the Skeleton
 
 ### Option 1: Manual / Indoor Testing Mode (Recommended First)

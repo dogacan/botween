@@ -134,12 +134,15 @@ def interaction_loop(mode, brain, listener, cam, preview, stop_event):
         stop_event.set()  # make sure the GUI loop (if any) exits too
 
 
-def run_skeleton(mode: str = "auto", show_preview: bool = False, no_camera: bool = False):
+def run_skeleton(mode: str = "auto", show_preview: bool = False, no_camera: bool = False, engine: str = config.ENGINE):
     print("=" * 60)
     print("      💀 BONESY THE TALKING SKELETON - BOTWEEN 🎃")
     print("=" * 60)
-    voice_info = f"Gemini ({config.GEMINI_VOICE_NAME})" if config.TTS_ENGINE == "gemini" else config.TTS_VOICE
-    print(f"Mode: {mode.upper()} | Engine: {config.TTS_ENGINE.upper()} | Voice: {voice_info} | FX: {config.ENABLE_SPOOKY_FX}")
+    if engine == "live":
+        print(f"Mode: {mode.upper()} | Engine: LIVE ({config.GEMINI_LIVE_MODEL}) | Voice: {config.GEMINI_VOICE_NAME} | FX: {config.ENABLE_SPOOKY_FX}")
+    else:
+        voice_info = f"Gemini ({config.GEMINI_VOICE_NAME})" if config.TTS_ENGINE == "gemini" else config.TTS_VOICE
+        print(f"Mode: {mode.upper()} | Engine: CLASSIC / TTS {config.TTS_ENGINE.upper()} | Voice: {voice_info} | FX: {config.ENABLE_SPOOKY_FX}")
 
     if not config.GEMINI_API_KEY:
         print("\n❌ Error: GEMINI_API_KEY is not configured!")
@@ -152,13 +155,6 @@ def run_skeleton(mode: str = "auto", show_preview: bool = False, no_camera: bool
         print("[Preview] --preview requires a camera; ignoring because --no-camera was set.")
         show_preview = False
 
-    brain = SkeletonBrain(config.GEMINI_API_KEY)
-    listener = AudioListener()
-
-    # Calibrate background noise if running in autonomous VAD mode
-    if mode == "auto":
-        listener.calibrate_noise_floor(duration_sec=1.5)
-
     cam = None
     if not no_camera:
         cam = Camera()
@@ -167,23 +163,35 @@ def run_skeleton(mode: str = "auto", show_preview: bool = False, no_camera: bool
     preview = Preview(cam) if (show_preview and cam) else None
     stop_event = threading.Event()
 
-    # Initial spooky awakening
-    print("\n[Skeleton] Bonesy is awakening...")
-    tts.speak("<cackle> Hehehe! </cackle> The bones are alive! <whisper> Who approaches my porch on this dark night? </whisper>", block=True)
-    print("[Skeleton] Ready for trick-or-treaters!\n")
+    if engine == "live":
+        from live_brain import LiveSkeleton
+
+        # Live engine handles Skelly Bluetooth, mic calibration and the awakening line itself.
+        conversation = LiveSkeleton(mode, cam, preview, stop_event).run_blocking
+    else:
+        brain = SkeletonBrain(config.GEMINI_API_KEY)
+        listener = AudioListener()
+
+        # Calibrate background noise if running in autonomous VAD mode
+        if mode == "auto":
+            listener.calibrate_noise_floor(duration_sec=1.5)
+
+        # Initial spooky awakening
+        print("\n[Skeleton] Bonesy is awakening...")
+        tts.speak("<cackle> Hehehe! </cackle> The bones are alive! <whisper> Who approaches my porch on this dark night? </whisper>", block=True)
+        print("[Skeleton] Ready for trick-or-treaters!\n")
+
+        def conversation():
+            interaction_loop(mode, brain, listener, cam, preview, stop_event)
 
     try:
         if preview:
             # GUI must own the main thread on macOS; conversation runs in a worker.
-            worker = threading.Thread(
-                target=interaction_loop,
-                args=(mode, brain, listener, cam, preview, stop_event),
-                daemon=True,
-            )
+            worker = threading.Thread(target=conversation, daemon=True)
             worker.start()
             preview.run(stop_event)
         else:
-            interaction_loop(mode, brain, listener, cam, None, stop_event)
+            conversation()
     except KeyboardInterrupt:
         pass
     finally:
@@ -212,5 +220,12 @@ if __name__ == "__main__":
         help="Run audio-only without webcam.",
     )
 
+    parser.add_argument(
+        "--engine",
+        choices=["live", "classic"],
+        default=config.ENGINE if config.ENGINE in ("live", "classic") else "live",
+        help="'live' streams through the Gemini Live API (low latency); 'classic' records, then calls generate_content + TTS.",
+    )
+
     args = parser.parse_args()
-    run_skeleton(mode=args.mode, show_preview=args.preview, no_camera=args.no_camera)
+    run_skeleton(mode=args.mode, show_preview=args.preview, no_camera=args.no_camera, engine=args.engine)

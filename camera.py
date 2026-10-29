@@ -49,7 +49,7 @@ class Camera:
                     self.latest_frame = frame
             time.sleep(0.03)  # ~30 FPS
 
-    def get_latest_jpeg_bytes(self, quality: int = 85) -> Optional[bytes]:
+    def get_latest_jpeg_bytes(self, quality: int = 85, max_dimension: Optional[int] = None) -> Optional[bytes]:
         """Returns the most recent camera frame encoded as JPEG bytes."""
         with self.lock:
             if self.latest_frame is None:
@@ -57,9 +57,10 @@ class Camera:
             frame = self.latest_frame.copy()
 
         # Resize if larger than max_dimension to optimize API latency
+        max_dimension = max_dimension or self.max_dimension
         h, w = frame.shape[:2]
-        if max(h, w) > self.max_dimension:
-            scale = self.max_dimension / float(max(h, w))
+        if max(h, w) > max_dimension:
+            scale = max_dimension / float(max(h, w))
             new_w, new_h = int(w * scale), int(h * scale)
             frame = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
