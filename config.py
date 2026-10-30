@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from google.genai import types
 
 # Load .env file from project root if present
 load_dotenv()
@@ -77,6 +78,9 @@ GEMINI_LIVE_MODEL = os.getenv("GEMINI_LIVE_MODEL", "gemini-3.8-live")
 LIVE_VIDEO_FPS = float(os.getenv("LIVE_VIDEO_FPS", "1.0"))          # Live API accepts at most 1 frame/s
 LIVE_VIDEO_MAX_DIM = int(os.getenv("LIVE_VIDEO_MAX_DIM", "768"))    # smaller frames = fewer tokens
 LIVE_IDLE_TIMEOUT_SEC = float(os.getenv("LIVE_IDLE_TIMEOUT_SEC", "25"))  # close session -> next visitor
+LIVE_MAX_TURNS = int(os.getenv("LIVE_MAX_TURNS", "6"))                  # max turns per visitor before memory reset
+LIVE_MAX_SESSION_SEC = float(os.getenv("LIVE_MAX_SESSION_SEC", "90"))   # max total seconds per visitor session
+LIVE_CAP_COOLDOWN_SEC = float(os.getenv("LIVE_CAP_COOLDOWN_SEC", "5"))  # ignore the mic this long after a cap goodbye
 LIVE_END_SILENCE_MS = int(os.getenv("LIVE_END_SILENCE_MS", "800"))  # server VAD: silence that ends a turn
 LIVE_ECHO_TAIL_SEC = float(os.getenv("LIVE_ECHO_TAIL_SEC", "1.2"))  # keep mic muted after speech (BT delay)
 # Live voice. Measured pitch: Alnilam ~92 Hz, Gacrux ~93, Umbriel ~93, Algenib ~99 (gravelly), Puck ~109.
@@ -98,3 +102,16 @@ SKELLY_BLE_NAME = os.getenv("SKELLY_BLE_NAME", "").strip()          # optional n
 SKELLY_VOLUME = os.getenv("SKELLY_VOLUME", "").strip()              # optional 0-255, set at startup
 # Output device for the voice (substring match). Falls back to the system default if not found.
 SKELLY_AUDIO_OUTPUT = os.getenv("SKELLY_AUDIO_OUTPUT", "Skelly").strip()
+
+# Content safety filters, shared by both engines. LOW_AND_ABOVE flags ordinary Halloween talk
+# (graves, blood, zombies), so MEDIUM_AND_ABOVE is the default.
+SAFETY_THRESHOLD = os.getenv("SAFETY_THRESHOLD", "BLOCK_MEDIUM_AND_ABOVE").strip().upper()
+SAFETY_SETTINGS = [
+    types.SafetySetting(category=category, threshold=types.HarmBlockThreshold[SAFETY_THRESHOLD])
+    for category in (
+        types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+        types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+        types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+        types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+    )
+]

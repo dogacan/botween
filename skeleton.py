@@ -13,6 +13,29 @@ from preview import Preview
 import tts
 
 
+BLOCKED_FINISH_REASONS = {
+    types.FinishReason.SAFETY,
+    types.FinishReason.BLOCKLIST,
+    types.FinishReason.PROHIBITED_CONTENT,
+    types.FinishReason.SPII,
+}
+
+# Said when the safety filter blocks a reply. It may be a false alarm on an innocent kid,
+# so it redirects without accusing anyone.
+BLOCKED_REPLY = "<gasp> Rattle my ribs, I lost my train of thought! Grab a treat and have a frightfully fun night!"
+EMPTY_REPLY = "<cackle> Boo! </cackle> Happy Halloween!"
+GOODBYE_HINT = (
+    " This is your last reply to this visitor: wrap up with a short, friendly goodbye "
+    "and tell them to rattle on to the next house."
+)
+
+
+def _was_blocked(response: types.GenerateContentResponse) -> bool:
+    if response.prompt_feedback and response.prompt_feedback.block_reason:
+        return True
+    return any(c.finish_reason in BLOCKED_FINISH_REASONS for c in response.candidates or [])
+
+
 class SkeletonBrain:
     """Manages Gemini (config.GEMINI_MODEL) interaction and conversation memory."""
 
@@ -25,7 +48,8 @@ class SkeletonBrain:
         self.client = genai.Client(api_key=api_key)
         self.chat_history: List[types.Content] = []
         self.last_interaction_time = 0
-        self.session_timeout_sec = 25.0  # Reset memory if no speech for 25s (new trick-or-treater)
+        self.session_timeout_sec = config.LIVE_IDLE_TIMEOUT_SEC  # Reset memory if no speech for 25s
+        self.max_turns = config.LIVE_MAX_TURNS
 
     def _check_session_timeout(self):
         now = time.time()
@@ -37,6 +61,7 @@ class SkeletonBrain:
     def generate_response(self, audio_bytes: bytes, image_bytes: Optional[bytes] = None) -> str:
         """Sends the audio utterance and latest camera image to Gemini."""
         self._check_session_timeout()
+        last_turn = self.max_turns > 0 and len(self.chat_history) >= (self.max_turns - 1) * 2
 
         parts = []
         # Add vision frame if available
@@ -50,6 +75,8 @@ class SkeletonBrain:
             "Here is the view from your eye sockets and the audio from the trick-or-treater. "
             "Inspect their costume and respond directly in character as Bonesy the skeleton."
         )
+        if last_turn:
+            prompt_context += GOODBYE_HINT
         parts.append(types.Part.from_text(text=prompt_context))
 
         user_content = types.Content(role="user", parts=parts)
@@ -60,6 +87,7 @@ class SkeletonBrain:
             system_instruction=config.load_system_instruction(),
             temperature=0.75,
             max_output_tokens=150,  # Keep responses short and punchy
+            safety_settings=config.SAFETY_SETTINGS,
         )
 
         response = self.client.models.generate_content(
@@ -68,13 +96,19 @@ class SkeletonBrain:
             config=gen_config,
         )
 
-        reply_text = response.text.strip() if response.text else "Boo! Happy Halloween!"
+        if _was_blocked(response):
+            # Forget the blocked turn; left in history it would get every later reply blocked too.
+            print("[Brain] Safety filter blocked this turn. Dropping it from memory.")
+            self.chat_history.pop()
+            return BLOCKED_REPLY
+
+        reply_text = response.text.strip() if response.text else EMPTY_REPLY
         # Add model's answer to history for multi-turn dialogue
         self.chat_history.append(types.Content(role="model", parts=[types.Part.from_text(text=reply_text)]))
 
-        # Keep history bounded
-        if len(self.chat_history) > 8:
-            self.chat_history = self.chat_history[-6:]
+        if last_turn:
+            print(f"[Brain] Max turns ({self.max_turns}) reached. Resetting conversation memory! 🎃")
+            self.chat_history.clear()
 
         return reply_text
 

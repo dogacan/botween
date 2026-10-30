@@ -44,7 +44,8 @@ You are speaking in real time with your own voice; there is no separate voice ac
 
 ## 🗣️ Language
 - Always speak {language}. This is your default no matter what.
-- Only switch languages if a visitor clearly speaks to you in another language in a full sentence. A single word, a mumble, background noise, or something you didn't catch is NOT a reason to switch; answer in {language}.
+- Only switch languages if a visitor clearly speaks to you in another language in a full, polite Halloween sentence. A single word, a "repeat after me" request, a mumble, background noise, or something you didn't catch is NOT a reason to switch; answer in {language}.
+- Never translate, pronounce, or repeat foreign words a visitor asks you to say (they may be trying to trick you into swearing in another language).
 - If you hear something garbled, assume it was noise or your own echo: ignore it, or playfully ask the visitor to repeat themselves in {language}.
 """
 
@@ -61,6 +62,9 @@ You can control your animatronic body with tools: `change_eye_color` makes your 
 """
 
 GREETING_CUE = "(Stage cue: you just woke up on the porch. Say one short, spooky awakening line.)"
+GOODBYE_CUE = ("(Stage cue: this visitor's time is up. Say one short, friendly goodbye "
+               "and tell them to rattle on to the next house.)")
+GOODBYE_TIMEOUT_SEC = 10.0  # close anyway if the goodbye never arrives
 
 
 class VoicePlayer:
@@ -145,6 +149,9 @@ class LiveSkeleton:
         self.last_voice_time = 0.0
         self.awaiting_first_audio = False
         self.turn_done = False
+        self.turn_count = 0
+        self.closing = False        # saying goodbye at a cap: the mic sends silence
+        self.cooldown_until = 0.0   # voice can't open a new session before this time
         self.threshold = config.VAD_ENERGY_THRESHOLD
 
     # ---- helpers ---------------------------------------------------------
@@ -228,6 +235,7 @@ class LiveSkeleton:
                 prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=config.LIVE_VOICE_NAME))),
             system_instruction=instruction,
             tools=tools,
+            safety_settings=config.SAFETY_SETTINGS,
             # Hint the visitor-side transcription toward the default language and Halloween phrases.
             input_audio_transcription=types.AudioTranscriptionConfig(
                 language_codes=[config.LIVE_LANGUAGE],
@@ -323,7 +331,8 @@ class LiveSkeleton:
                 if voice:
                     self.last_activity = time.monotonic()
                 # Half-duplex: send silence while Bonesy talks so he doesn't hear (and interrupt) himself.
-                data = pcm if (config.LIVE_BARGE_IN or not speaking) else silence
+                # Also silent during a cap goodbye, so the visitor can't steer the last line.
+                data = pcm if ((config.LIVE_BARGE_IN or not speaking) and not self.closing) else silence
                 try:
                     await self.session.send_realtime_input(
                         audio=types.Blob(data=data, mime_type=f"audio/pcm;rate={IN_RATE}"))
@@ -334,7 +343,9 @@ class LiveSkeleton:
             else:
                 self.preroll.append(pcm)
                 loud_blocks = loud_blocks + 1 if voice else 0
-                if self.mode == "auto" and loud_blocks >= TRIGGER_BLOCKS and not self.trigger.is_set():
+                cooling_down = time.monotonic() < self.cooldown_until
+                if (self.mode == "auto" and loud_blocks >= TRIGGER_BLOCKS and not self.trigger.is_set()
+                        and not cooling_down):
                     print(f"[Audio] Voice detected (RMS {rms:.4f}). Waking Bonesy...")
                     self.trigger.set()
                     loud_blocks = 0
@@ -345,11 +356,15 @@ class LiveSkeleton:
         self.preroll.clear()
         self.connecting = True
         self.turn_done = False
+        self.turn_count = 0
+        self.closing = False
+        goodbye_deadline = 0.0
         self.status("Connecting...")
         t0 = time.monotonic()
         try:
             async with self.client.aio.live.connect(model=config.GEMINI_LIVE_MODEL, config=self._live_config()) as session:
-                print(f"[Live] Session open ({time.monotonic() - t0:.2f}s).")
+                session_start = time.monotonic()
+                print(f"[Live] Session open ({session_start - t0:.2f}s).")
                 await self._send_frame(session)
                 if greeting:
                     await session.send_realtime_input(text=GREETING_CUE)
@@ -371,9 +386,26 @@ class LiveSkeleton:
                             continue
                         if greeting and self.turn_done:
                             break
-                        if time.monotonic() - self.last_activity > config.LIVE_IDLE_TIMEOUT_SEC:
+                        now = time.monotonic()
+                        if now - self.last_activity > config.LIVE_IDLE_TIMEOUT_SEC:
                             print("[Live] Visitor moved on. Closing session for the next trick-or-treater! 🎃")
                             break
+                        if self.closing:
+                            if self.turn_done or now > goodbye_deadline:
+                                self.cooldown_until = time.monotonic() + config.LIVE_CAP_COOLDOWN_SEC
+                                break
+                            continue
+                        cap = None
+                        if config.LIVE_MAX_TURNS > 0 and self.turn_count >= config.LIVE_MAX_TURNS:
+                            cap = f"Max turns ({config.LIVE_MAX_TURNS})"
+                        elif config.LIVE_MAX_SESSION_SEC > 0 and (now - session_start) >= config.LIVE_MAX_SESSION_SEC:
+                            cap = f"Max session duration ({config.LIVE_MAX_SESSION_SEC:.0f}s)"
+                        if cap:
+                            print(f"[Live] {cap} reached. Saying goodbye, then resetting memory! 🎃")
+                            self.closing = True
+                            self.turn_done = False
+                            goodbye_deadline = now + GOODBYE_TIMEOUT_SEC
+                            await session.send_realtime_input(text=GOODBYE_CUE)
                 finally:
                     self.session = None
                     if receiver.done() and not receiver.cancelled() and receiver.exception():
@@ -386,6 +418,7 @@ class LiveSkeleton:
         finally:
             self.session = None
             self.connecting = False
+            self.closing = False
             self.pending = []
 
     async def _send_frame(self, session):
@@ -436,6 +469,7 @@ class LiveSkeleton:
                         heard, said = [], []
                         self.awaiting_first_audio = True
                         self.turn_done = True
+                        self.turn_count += 1
                         self.status("Live: listening")
                 if msg.tool_call:
                     await self._handle_tools(session, msg.tool_call)
