@@ -13,7 +13,7 @@ https://github.com/martinecker/SkellyUltra and https://github.com/TE-DMod/UltraS
 
 Run directly for quick hardware checks:
   python3 skelly_ble.py scan
-  python3 skelly_ble.py live          # turn on the "(Live)" Bluetooth speaker
+  python3 skelly_ble.py live          # turn on the "(Live)" speaker and wait while you pair it
   python3 skelly_ble.py volume 200
   python3 skelly_ble.py eyes red
   python3 skelly_ble.py move all
@@ -105,6 +105,7 @@ class SkellyBLE:
         self._responses: Dict[int, bytes] = {}
         self._response_event = asyncio.Event()
         self._lock = asyncio.Lock()
+        self._closing = False
 
     @property
     def is_connected(self) -> bool:
@@ -131,13 +132,19 @@ class SkellyBLE:
                   "and disconnected from the phone app?")
             return False
         self.device_name = device.name
-        self.client = BleakClient(device, disconnected_callback=lambda _c: print("[Skelly] Bluetooth control link dropped."))
+        self._closing = False
+        self.client = BleakClient(device, disconnected_callback=self._on_disconnect)
         await self.client.connect()
         await self.client.start_notify(NOTIFY_UUID, self._on_notify)
         print(f"[Skelly] Connected to '{self.device_name}' ({device.address}).")
         return True
 
+    def _on_disconnect(self, _client):
+        if not self._closing:
+            print("[Skelly] Bluetooth control link dropped.")
+
     async def disconnect(self):
+        self._closing = True
         if self.client:
             try:
                 await self.client.disconnect()
@@ -211,16 +218,96 @@ class SkellyBLE:
         await self.send(build_frame(CMD_SET_MOVEMENT, _global_setting(parts, 0)))
 
 
-def connect_live_speaker(name: str) -> bool:
-    """Asks macOS to connect the paired '(Live)' speaker via blueutil, if it is installed."""
-    blueutil = shutil.which("blueutil")
-    if not blueutil:
-        return False
+def find_output_device(name_hint: str) -> Optional[int]:
+    """Index of the first audio output whose name contains name_hint (case-insensitive)."""
+    import sounddevice as sd
+
+    if not name_hint:
+        return None
+    for idx, dev in enumerate(sd.query_devices()):
+        if dev["max_output_channels"] > 0 and name_hint.lower() in dev["name"].lower():
+            return idx
+    return None
+
+
+def refresh_audio_devices():
+    """PortAudio caches the device list at startup; re-scan so a newly connected speaker shows up."""
+    import sounddevice as sd
+
+    sd._terminate()
+    sd._initialize()
+
+
+def _is_live_speaker(device_name: str, wanted: str) -> bool:
+    device_name = device_name.lower()
+    if device_name == wanted.lower():
+        return True
+    hints = (config.SKELLY_BLE_NAME.lower(),) if config.SKELLY_BLE_NAME else DEFAULT_NAME_HINTS
+    return "(live)" in device_name and any(h in device_name for h in hints)
+
+
+def connect_live_speaker(name: str) -> Optional[str]:
+    """
+    Asks macOS to connect the already-paired '(Live)' speaker. Blocking; returns how it was
+    requested ("IOBluetooth" or "blueutil"), or None if it couldn't be.
+    """
     try:
-        result = subprocess.run([blueutil, "--connect", name], capture_output=True, text=True, timeout=20)
-        return result.returncode == 0
-    except Exception:
-        return False
+        from IOBluetooth import IOBluetoothDevice  # pip install pyobjc-framework-IOBluetooth
+
+        for dev in IOBluetoothDevice.pairedDevices() or []:
+            if _is_live_speaker(dev.name() or "", name):
+                if dev.isConnected() or dev.openConnection() == 0:
+                    return "IOBluetooth"
+                return None
+    except ImportError:
+        pass
+    except Exception as e:
+        print(f"[Skelly] IOBluetooth connect failed: {e}")
+
+    blueutil = shutil.which("blueutil")
+    if blueutil:
+        try:
+            result = subprocess.run([blueutil, "--connect", name], capture_output=True, text=True, timeout=20)
+            if result.returncode == 0:
+                return "blueutil"
+        except Exception:
+            pass
+    return None
+
+
+async def wait_for_live_speaker(skelly: "SkellyBLE", timeout_sec: float, retry_every: float = 5.0) -> Optional[int]:
+    """
+    Waits until the '(Live)' speaker shows up as an audio output, asking macOS to connect it
+    every few seconds and keeping the BLE control link (and so live mode) up meanwhile.
+    Returns the sounddevice output index, or None on timeout.
+    """
+    hint = config.SKELLY_AUDIO_OUTPUT or "Skelly"
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout_sec
+    next_connect = loop.time() + 1.0  # give live mode a moment to come up
+    announced = False
+    while True:
+        refresh_audio_devices()
+        device = find_output_device(hint)
+        if device is not None:
+            return device
+        now = loop.time()
+        if now >= deadline:
+            return None
+        if now >= next_connect:
+            how = await asyncio.to_thread(connect_live_speaker, skelly.live_speaker_name)
+            if how and not announced:
+                print(f"[Skelly] Asked macOS to connect '{skelly.live_speaker_name}' ({how})...")
+                announced = True
+            next_connect = loop.time() + retry_every
+        if not skelly.is_connected:
+            print("[Skelly] Reconnecting control link...")
+            try:
+                if await skelly.connect():
+                    await skelly.enable_live_mode()
+            except Exception as e:
+                print(f"[Skelly] Reconnect failed: {e}")
+        await asyncio.sleep(1.0)
 
 
 def parse_color(text: str) -> Tuple[int, int, int]:
@@ -231,6 +318,18 @@ def parse_color(text: str) -> Tuple[int, int, int]:
     if len(hex_str) == 6:
         return tuple(int(hex_str[i:i + 2], 16) for i in (0, 2, 4))
     raise ValueError(f"Unknown color '{text}'. Use one of {', '.join(COLORS)} or #RRGGBB.")
+
+
+async def _wait_for_live_speaker(skelly: SkellyBLE, timeout_sec: int):
+    """Keeps the control link open while the user pairs the '(Live)' speaker, until it shows up as audio output."""
+    if find_output_device(config.SKELLY_AUDIO_OUTPUT or "Skelly") is None:
+        print(f"[Skelly] If '{skelly.live_speaker_name}' isn't paired yet: System Settings > Bluetooth, "
+              f"connect it (PIN 1234).\n[Skelly] Keeping the skeleton connected for up to {timeout_sec}s "
+              "while it connects (Ctrl+C to stop)...")
+    if await wait_for_live_speaker(skelly, timeout_sec) is not None:
+        print(f"[Skelly] '{skelly.live_speaker_name}' is connected as an audio output. All set!")
+    else:
+        print("[Skelly] Timed out waiting for the speaker. Run this again to retry.")
 
 
 async def _cli(args):
@@ -253,8 +352,8 @@ async def _cli(args):
             print(f"  Version response: {version.hex(' ') if version else 'no reply'}")
         elif args.command == "live":
             acked = await skelly.enable_live_mode()
-            print(f"[Skelly] Live mode {'enabled' if acked else 'requested (no ack)'}. "
-                  f"Pair/connect '{skelly.live_speaker_name}' on this Mac (PIN 1234).")
+            print(f"[Skelly] Live mode {'enabled' if acked else 'requested (no ack)'}.")
+            await _wait_for_live_speaker(skelly, int(args.value or 180))
         elif args.command == "volume":
             await skelly.set_volume(int(args.value))
             print(f"[Skelly] Volume set to {args.value}.")
@@ -278,5 +377,6 @@ async def _cli(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Ultra Skelly Bluetooth control")
     parser.add_argument("command", choices=["scan", "info", "live", "volume", "eyes", "torso", "icon", "move"])
-    parser.add_argument("value", nargs="?", help="volume 0-255, color name/#RRGGBB, icon 1-18, or head/arm/torso/all")
+    parser.add_argument("value", nargs="?", help="volume 0-255, color name/#RRGGBB, icon 1-18, head/arm/torso/all, "
+                                                 "or for 'live' how many seconds to wait for pairing (default 180)")
     asyncio.run(_cli(parser.parse_args()))

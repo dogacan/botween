@@ -53,13 +53,23 @@ class AudioListener:
                 device = int(device)
 
         if device is None:
+            # Never listen through the skeleton's Bluetooth "(Live)" link: macOS treats it as a
+            # headset and may make it the default input, which drops audio to phone-call quality.
+            skelly_hint = (config.SKELLY_AUDIO_OUTPUT or "Skelly").lower()
+            devices = sd.query_devices()
+
+            def _usable(idx):
+                return (idx is not None and 0 <= idx < len(devices)
+                        and devices[idx]["max_input_channels"] > 0
+                        and skelly_hint not in devices[idx]["name"].lower())
+
             default_in = sd.default.device[0]
-            if default_in is not None and default_in >= 0:
+            if _usable(default_in):
                 device = default_in
             else:
-                # Fallback to first available device with input channels
-                for idx, d in enumerate(sd.query_devices()):
-                    if d["max_input_channels"] > 0:
+                # Fallback to first available input that isn't the skeleton
+                for idx in range(len(devices)):
+                    if _usable(idx):
                         device = idx
                         break
 

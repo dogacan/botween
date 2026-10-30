@@ -22,6 +22,7 @@ from google.genai import types
 
 import config
 from audio import AudioListener
+from skelly_ble import find_output_device
 
 IN_RATE = 16000
 OUT_RATE = 24000
@@ -47,22 +48,6 @@ You can control your animatronic body with tools: `change_eye_color` makes your 
 """
 
 GREETING_CUE = "(Stage cue: you just woke up on the porch. Say one short, spooky awakening line.)"
-
-
-def resolve_output_device(name_hint: str) -> Optional[int]:
-    """Index of the first output device whose name contains name_hint (case-insensitive)."""
-    if not name_hint:
-        return None
-    for idx, dev in enumerate(sd.query_devices()):
-        if dev["max_output_channels"] > 0 and name_hint.lower() in dev["name"].lower():
-            return idx
-    return None
-
-
-def refresh_audio_devices():
-    """PortAudio caches the device list at startup; re-scan so a newly connected speaker shows up."""
-    sd._terminate()
-    sd._initialize()
 
 
 class CryptEcho:
@@ -200,19 +185,12 @@ class LiveSkeleton:
             return None
 
     async def _find_output_device(self) -> Optional[int]:
-        device = resolve_output_device(config.SKELLY_AUDIO_OUTPUT)
+        device = find_output_device(config.SKELLY_AUDIO_OUTPUT)
         if device is None and self.skelly:
-            from skelly_ble import connect_live_speaker
+            from skelly_ble import wait_for_live_speaker
 
             print(f"[Audio] Waiting for '{self.skelly.live_speaker_name}' to connect as an audio output...")
-            if connect_live_speaker(self.skelly.live_speaker_name):
-                print("[Audio] Asked macOS to connect it via blueutil.")
-            for _ in range(15):
-                await asyncio.sleep(1.0)
-                refresh_audio_devices()
-                device = resolve_output_device(config.SKELLY_AUDIO_OUTPUT)
-                if device is not None:
-                    break
+            device = await wait_for_live_speaker(self.skelly, timeout_sec=25)
         if device is None:
             print(f"[Audio] No output device matching '{config.SKELLY_AUDIO_OUTPUT}'. Using the system default.\n"
                   "        To use the skeleton's speaker: System Settings > Bluetooth > connect "
