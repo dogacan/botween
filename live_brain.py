@@ -40,7 +40,19 @@ You are speaking in real time with your own voice; there is no separate voice ac
 - Never write or say angle-bracket tags like <gasp>, <whisper> or <cackle>. Perform them with your voice instead: actually gasp, whisper, cackle and pause.
 - You see a live camera feed from your eye sockets. Only describe what you can actually see.
 - Keep every reply to 1-2 short sentences, then let the visitor talk.
+
+## 🗣️ Language
+- Always speak {language}. This is your default no matter what.
+- Only switch languages if a visitor clearly speaks to you in another language in a full sentence. A single word, a mumble, background noise, or something you didn't catch is NOT a reason to switch; answer in {language}.
+- If you hear something garbled, assume it was noise or your own echo: ignore it, or playfully ask the visitor to repeat themselves in {language}.
 """
+
+LANGUAGE_NAMES = {"en": "English", "es": "Spanish", "tr": "Turkish", "fr": "French", "de": "German",
+                  "it": "Italian", "pt": "Portuguese", "nl": "Dutch", "ja": "Japanese", "ko": "Korean"}
+
+
+def language_name(code: str) -> str:
+    return LANGUAGE_NAMES.get(code.split("-")[0].lower(), code)
 
 TOOLS_ADDENDUM = """
 ## 💀 Your Body
@@ -200,7 +212,8 @@ class LiveSkeleton:
         return device
 
     def _live_config(self) -> types.LiveConnectConfig:
-        instruction = config.load_system_instruction() + LIVE_ADDENDUM
+        instruction = config.load_system_instruction() + LIVE_ADDENDUM.format(
+            language=language_name(config.LIVE_LANGUAGE))
         tools = None
         if self.skelly:
             from skelly_ble import COLORS, MOVEMENTS
@@ -231,7 +244,10 @@ class LiveSkeleton:
                 prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=config.GEMINI_VOICE_NAME))),
             system_instruction=instruction,
             tools=tools,
-            input_audio_transcription=types.AudioTranscriptionConfig(),
+            # Hint the visitor-side transcription toward the default language and Halloween phrases.
+            input_audio_transcription=types.AudioTranscriptionConfig(
+                language_codes=[config.LIVE_LANGUAGE],
+                custom_vocabulary=["trick or treat", "Bonesy", "Happy Halloween"]),
             output_audio_transcription=types.AudioTranscriptionConfig(),
             context_window_compression=types.ContextWindowCompressionConfig(sliding_window=types.SlidingWindow()),
             realtime_input_config=types.RealtimeInputConfig(

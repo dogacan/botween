@@ -78,7 +78,9 @@ LIVE_VIDEO_FPS = float(os.getenv("LIVE_VIDEO_FPS", "1.0"))          # Live API a
 LIVE_VIDEO_MAX_DIM = int(os.getenv("LIVE_VIDEO_MAX_DIM", "768"))    # smaller frames = fewer tokens
 LIVE_IDLE_TIMEOUT_SEC = float(os.getenv("LIVE_IDLE_TIMEOUT_SEC", "25"))  # close session -> next visitor
 LIVE_END_SILENCE_MS = int(os.getenv("LIVE_END_SILENCE_MS", "800"))  # server VAD: silence that ends a turn
-LIVE_ECHO_TAIL_SEC = float(os.getenv("LIVE_ECHO_TAIL_SEC", "0.6"))  # keep mic muted after speech (BT delay)
+LIVE_ECHO_TAIL_SEC = float(os.getenv("LIVE_ECHO_TAIL_SEC", "1.2"))  # keep mic muted after speech (BT delay)
+# Default conversation language (BCP-47). Bonesy only switches if a visitor clearly speaks another language.
+LIVE_LANGUAGE = os.getenv("LIVE_LANGUAGE", "en-US").strip() or "en-US"
 LIVE_BARGE_IN = _env_bool("LIVE_BARGE_IN", "false")                 # let visitors interrupt (needs no echo!)
 LIVE_KEEPALIVE_LEVEL = float(os.getenv("LIVE_KEEPALIVE_LEVEL", "0.001"))  # faint noise keeps BT speaker awake
 
