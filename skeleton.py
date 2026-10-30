@@ -139,7 +139,8 @@ def run_skeleton(mode: str = "auto", show_preview: bool = False, no_camera: bool
     print("      💀 BONESY THE TALKING SKELETON - BOTWEEN 🎃")
     print("=" * 60)
     if engine == "live":
-        print(f"Mode: {mode.upper()} | Engine: LIVE ({config.GEMINI_LIVE_MODEL}) | Voice: {config.GEMINI_VOICE_NAME} | FX: {config.ENABLE_SPOOKY_FX}")
+        print(f"Mode: {mode.upper()} | Engine: LIVE ({config.GEMINI_LIVE_MODEL}) | Voice: {config.LIVE_VOICE_NAME} | "
+              f"FX: {f'{config.LIVE_PITCH_SEMITONES:+g} semitones + echo' if config.ENABLE_SPOOKY_FX else 'off'}")
     else:
         voice_info = f"Gemini ({config.GEMINI_VOICE_NAME})" if config.TTS_ENGINE == "gemini" else config.TTS_VOICE
         print(f"Mode: {mode.upper()} | Engine: CLASSIC / TTS {config.TTS_ENGINE.upper()} | Voice: {voice_info} | FX: {config.ENABLE_SPOOKY_FX}")

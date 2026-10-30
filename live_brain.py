@@ -23,6 +23,7 @@ from google.genai import types
 import config
 from audio import AudioListener
 from skelly_ble import find_output_device
+from voice_fx import VoiceFX
 
 IN_RATE = 16000
 OUT_RATE = 24000
@@ -60,23 +61,6 @@ You can control your animatronic body with tools: `change_eye_color` makes your 
 """
 
 GREETING_CUE = "(Stage cue: you just woke up on the porch. Say one short, spooky awakening line.)"
-
-
-class CryptEcho:
-    """Streaming version of the ffmpeg 'aecho=0.8:0.75:60|120:0.3|0.15' crypt reverb."""
-
-    def __init__(self, rate: int = OUT_RATE):
-        self.d1 = int(rate * 0.060)
-        self.d2 = int(rate * 0.120)
-        self.history = np.zeros(self.d2, dtype=np.float32)
-
-    def process(self, pcm: bytes) -> bytes:
-        x = np.frombuffer(pcm, dtype="<i2").astype(np.float32)
-        ext = np.concatenate([self.history, x])
-        h, n = len(self.history), len(x)
-        y = 0.8 * x + 0.3 * ext[h - self.d1:h - self.d1 + n] + 0.15 * ext[h - self.d2:h - self.d2 + n]
-        self.history = ext[-self.d2:]
-        return np.clip(y * 0.75, -32768, 32767).astype("<i2").tobytes()
 
 
 class VoicePlayer:
@@ -150,7 +134,7 @@ class LiveSkeleton:
         self.client = genai.Client(api_key=config.GEMINI_API_KEY)
         self.skelly = None
         self.player: Optional[VoicePlayer] = None
-        self.fx = CryptEcho() if config.ENABLE_SPOOKY_FX else None
+        self.fx = VoiceFX(OUT_RATE) if config.ENABLE_SPOOKY_FX else None
 
         self.session = None
         self.connecting = False
@@ -241,7 +225,7 @@ class LiveSkeleton:
         return types.LiveConnectConfig(
             response_modalities=["AUDIO"],
             speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(
-                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=config.GEMINI_VOICE_NAME))),
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=config.LIVE_VOICE_NAME))),
             system_instruction=instruction,
             tools=tools,
             # Hint the visitor-side transcription toward the default language and Halloween phrases.
@@ -440,7 +424,11 @@ class LiveSkeleton:
                         said.append(sc.output_transcription.text)
                     if sc.interrupted:
                         self.player.clear()
+                        if self.fx:
+                            self.fx = VoiceFX(OUT_RATE)  # drop any echo of the cut-off reply
                     if sc.turn_complete:
+                        if self.fx:
+                            self.player.enqueue(self.fx.flush())  # let the echo ring out
                         if heard:
                             print(f"[Visitor] {''.join(heard).strip()}")
                         if said:

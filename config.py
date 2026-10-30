@@ -79,6 +79,13 @@ LIVE_VIDEO_MAX_DIM = int(os.getenv("LIVE_VIDEO_MAX_DIM", "768"))    # smaller fr
 LIVE_IDLE_TIMEOUT_SEC = float(os.getenv("LIVE_IDLE_TIMEOUT_SEC", "25"))  # close session -> next visitor
 LIVE_END_SILENCE_MS = int(os.getenv("LIVE_END_SILENCE_MS", "800"))  # server VAD: silence that ends a turn
 LIVE_ECHO_TAIL_SEC = float(os.getenv("LIVE_ECHO_TAIL_SEC", "1.2"))  # keep mic muted after speech (BT delay)
+# Live voice. Measured pitch: Alnilam ~92 Hz, Gacrux ~93, Umbriel ~93, Algenib ~99 (gravelly), Puck ~109.
+LIVE_VOICE_NAME = os.getenv("LIVE_VOICE_NAME", "Algenib").strip() or "Algenib"
+# Real-time voice FX (applied when ENABLE_SPOOKY_FX=true): pitch shift + crypt reverb + echo
+LIVE_PITCH_SEMITONES = float(os.getenv("LIVE_PITCH_SEMITONES", "-3"))  # negative = deeper; 0 = off
+LIVE_ECHO_DELAY_MS = float(os.getenv("LIVE_ECHO_DELAY_MS", "220"))      # time between echo repeats
+LIVE_ECHO_FEEDBACK = float(os.getenv("LIVE_ECHO_FEEDBACK", "0.35"))     # how much each repeat keeps (0-0.9)
+LIVE_ECHO_MIX = float(os.getenv("LIVE_ECHO_MIX", "0.2"))               # echo loudness; 0 = no echo
 # Default conversation language (BCP-47). Bonesy only switches if a visitor clearly speaks another language.
 LIVE_LANGUAGE = os.getenv("LIVE_LANGUAGE", "en-US").strip() or "en-US"
 LIVE_BARGE_IN = _env_bool("LIVE_BARGE_IN", "false")                 # let visitors interrupt (needs no echo!)
