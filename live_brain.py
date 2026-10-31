@@ -498,6 +498,8 @@ class LiveSkeleton:
                 if motion_visit and self.last_voice_time >= t0 - 1.0:
                     # They spoke while we were connecting; their words start the turn, no cue needed.
                     print("[Live] Visitor is already talking. Letting them go first.")
+                elif motion_visit:
+                    await self._send_cue_with_frame(session, cue)
                 elif cue:
                     await session.send_realtime_input(text=cue)
                 self.session = session
@@ -553,6 +555,21 @@ class LiveSkeleton:
             self.connecting = False
             self.closing = False
             self.pending = []
+
+    async def _send_cue_with_frame(self, session, cue: str):
+        """Sends a stage cue and the current camera frame as one message.
+
+        A text cue sent on its own gets answered before Gemini looks at the video stream, so Bonesy
+        sees nobody. With the frame in the same message he sees who walked up.
+        """
+        parts = []
+        jpeg = self.cam.get_latest_jpeg_bytes(max_dimension=config.LIVE_VIDEO_MAX_DIM) if self.cam else None
+        if jpeg:
+            parts.append(types.Part.from_bytes(data=jpeg, mime_type="image/jpeg"))
+            if self.preview:
+                self.preview.update_sent(jpeg)
+        parts.append(types.Part(text=cue))
+        await session.send_client_content(turns=types.Content(role="user", parts=parts), turn_complete=True)
 
     async def _send_frame(self, session):
         if not self.cam:
