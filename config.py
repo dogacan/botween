@@ -151,6 +151,13 @@ SKELLY_BLE_ENABLED = _env_bool("SKELLY_BLE_ENABLED", "true")
 SKELLY_BLE_ADDRESS = os.getenv("SKELLY_BLE_ADDRESS", "").strip()    # optional; macOS uses UUIDs, not MACs
 SKELLY_BLE_NAME = os.getenv("SKELLY_BLE_NAME", "").strip()          # optional name hint, e.g. "Ultra Skelly v2"
 SKELLY_VOLUME = os.getenv("SKELLY_VOLUME", "").strip()              # optional 0-255, set at startup
+# Body parts allowed to move (head, arm, torso, all or none), set on the skeleton at startup.
+# Enabled parts keep moving whenever it plays sound, even between runs. The torso is left out by
+# default because it shakes the camera view and throws off motion detection.
+_raw_movement = os.getenv("SKELLY_MOVEMENT", "head,arm").strip().lower()
+SKELLY_MOVEMENT = [] if _raw_movement in ("", "none", "false", "off") else (
+    ["head", "arm", "torso"] if _raw_movement == "all"
+    else [p for p in ("head", "arm", "torso") if p in {v.strip() for v in _raw_movement.split(",")}])
 # Output device for the voice (substring match). Falls back to the system default if not found.
 SKELLY_AUDIO_OUTPUT = os.getenv("SKELLY_AUDIO_OUTPUT", "Skelly").strip()
 

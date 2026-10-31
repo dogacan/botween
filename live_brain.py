@@ -59,8 +59,18 @@ def language_name(code: str) -> str:
 
 TOOLS_ADDENDUM = """
 ## 💀 Your Body
-You can control your animatronic body with tools: `change_eye_color` makes your eyes glow a color (red when spooking someone, green for a witch, etc.) and `move` wiggles your head, arm or torso. Use them now and then for dramatic effect while you talk. Never mention the tools out loud.
+You can control your animatronic body with tools: `change_eye_color` makes your eyes glow a color (red when spooking someone, green for a witch, etc.){move_text}. Use them now and then for dramatic effect while you talk. Never mention the tools out loud.
 """
+
+
+def movement_mask(parts: List[str]) -> int:
+    """Bitmask for the skeleton's movement setting from part names (head/arm/torso)."""
+    from skelly_ble import MOVEMENTS
+
+    mask = 0
+    for part in parts:
+        mask |= MOVEMENTS[part]
+    return mask
 
 GREETING_CUE = "(Stage cue: you just woke up on the porch. Say one short, spooky awakening line.)"
 GOODBYE_CUE = ("(Stage cue: this visitor's time is up. Say one short, friendly goodbye "
@@ -189,6 +199,11 @@ class LiveSkeleton:
             print(f"[Skelly] Live speaker {'enabled' if acked else 'requested'}: '{skelly.live_speaker_name}'.")
             if config.SKELLY_VOLUME:
                 await skelly.set_volume(int(config.SKELLY_VOLUME))
+            # The movement setting persists on the skeleton between runs, so always set it explicitly.
+            await skelly.move(movement_mask(config.SKELLY_MOVEMENT))
+            off = [p for p in ("head", "arm", "torso") if p not in config.SKELLY_MOVEMENT]
+            print(f"[Skelly] Movement on: {', '.join(config.SKELLY_MOVEMENT) or 'none'}"
+                  f"{'; off: ' + ', '.join(off) if off else ''} (SKELLY_MOVEMENT).")
             return skelly
         except Exception as e:
             print(f"[Skelly] Bluetooth control unavailable ({e}). Continuing without it.")
@@ -217,8 +232,10 @@ class LiveSkeleton:
         if self.skelly:
             from skelly_ble import COLORS, MOVEMENTS
 
-            instruction += TOOLS_ADDENDUM
-            tools = [types.Tool(function_declarations=[
+            parts = config.SKELLY_MOVEMENT
+            instruction += TOOLS_ADDENDUM.format(
+                move_text=f" and `move` wiggles your {' or '.join(parts)}" if parts else "")
+            functions = [
                 types.FunctionDeclaration(
                     name="change_eye_color",
                     description="Make the skeleton's glowing eyes change color.",
@@ -226,14 +243,16 @@ class LiveSkeleton:
                         "color": types.Schema(type="STRING", enum=list(COLORS)),
                     }),
                 ),
-                types.FunctionDeclaration(
+            ]
+            if parts:
+                functions.append(types.FunctionDeclaration(
                     name="move",
                     description="Make the skeleton do a short movement with part of its body.",
                     parameters=types.Schema(type="OBJECT", required=["part"], properties={
-                        "part": types.Schema(type="STRING", enum=list(MOVEMENTS)),
+                        "part": types.Schema(type="STRING", enum=parts + (["all"] if len(parts) > 1 else [])),
                     }),
-                ),
-            ])]
+                ))
+            tools = [types.Tool(function_declarations=functions)]
 
         handling = (types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS if config.LIVE_BARGE_IN
                     else types.ActivityHandling.NO_INTERRUPTION)
@@ -560,7 +579,7 @@ class LiveSkeleton:
         self.player.enqueue(self.fx.process(pcm) if self.fx else pcm)
 
     async def _handle_tools(self, session, tool_call):
-        from skelly_ble import CHANNEL_HEAD, COLORS, MOVEMENTS
+        from skelly_ble import CHANNEL_HEAD, COLORS
 
         responses = []
         for fc in tool_call.function_calls or []:
@@ -572,7 +591,11 @@ class LiveSkeleton:
                 if fc.name == "change_eye_color":
                     await asyncio.wait_for(self.skelly.set_light_color(CHANNEL_HEAD, COLORS[args["color"]]), 3)
                 elif fc.name == "move":
-                    await asyncio.wait_for(self.skelly.move(MOVEMENTS[args["part"]]), 3)
+                    part = args["part"]
+                    if part != "all" and part not in config.SKELLY_MOVEMENT:
+                        raise ValueError(f"{part} movement is switched off")
+                    parts = config.SKELLY_MOVEMENT if part == "all" else [part]
+                    await asyncio.wait_for(self.skelly.move(movement_mask(parts)), 3)
                 else:
                     raise ValueError(f"unknown tool {fc.name}")
                 print(f"[Skelly] {fc.name}({args})")

@@ -77,8 +77,11 @@ python3 skelly_ble.py volume 200     # 0-255
 python3 skelly_ble.py eyes red       # head light: red/orange/yellow/green/blue/cyan/purple/pink/white or #RRGGBB
 python3 skelly_ble.py torso purple
 python3 skelly_ble.py move all       # head / arm / torso / all
+python3 skelly_ble.py move none      # switch all body movement off
 ```
-While talking, Gemini can also call `change_eye_color` and `move` itself for dramatic effect.
+While talking, Gemini can also call `change_eye_color` itself for dramatic effect.
+
+Gemini can call `move` too, but only for the parts in `SKELLY_MOVEMENT` (default `head,arm`). Bonesy sets this on the skeleton at startup because it stays on between runs, and enabled parts move whenever the skeleton plays sound. The torso is left out by default because it shakes the camera view and throws off motion detection. Use `head,arm,torso`, `all` or `none` to change it.
 
 ### Live tuning (`.env`)
 * `LIVE_END_SILENCE_MS` (default 800): how long a pause ends the visitor's turn. Lower is snappier but may cut kids off.

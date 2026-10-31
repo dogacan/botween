@@ -367,8 +367,9 @@ async def _cli(args):
             await skelly.set_eye_icon(int(args.value))
             print(f"[Skelly] Eye icon set to {args.value}.")
         elif args.command == "move":
-            await skelly.move(MOVEMENTS[args.value or "all"])
-            print(f"[Skelly] Movement '{args.value or 'all'}' sent.")
+            part = args.value or "all"
+            await skelly.move(0 if part == "none" else MOVEMENTS[part])
+            print(f"[Skelly] Movement '{part}' sent.")
         await asyncio.sleep(0.5)  # let the write flush before disconnecting
     finally:
         await skelly.disconnect()
@@ -377,6 +378,6 @@ async def _cli(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Ultra Skelly Bluetooth control")
     parser.add_argument("command", choices=["scan", "info", "live", "volume", "eyes", "torso", "icon", "move"])
-    parser.add_argument("value", nargs="?", help="volume 0-255, color name/#RRGGBB, icon 1-18, head/arm/torso/all, "
+    parser.add_argument("value", nargs="?", help="volume 0-255, color name/#RRGGBB, icon 1-18, head/arm/torso/all/none, "
                                                  "or for 'live' how many seconds to wait for pairing (default 180)")
     asyncio.run(_cli(parser.parse_args()))
