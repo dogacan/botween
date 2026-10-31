@@ -9,6 +9,8 @@ import config
 import tts
 from devices import DeviceSpec, find_microphone, parse_spec
 
+MIC_WARMUP_SEC = 0.5  # USB mics pop for about this long after the stream opens
+
 
 def create_wav_bytes(audio_data: np.ndarray, sample_rate: int = config.SAMPLE_RATE) -> bytes:
     """Encodes float32 or int16 numpy array into standard WAV file bytes in memory."""
@@ -97,14 +99,17 @@ class AudioListener:
             device=self.device,
             callback=_cal_callback,
         ):
-            sd.sleep(int(duration_sec * 1000))
+            sd.sleep(int((MIC_WARMUP_SEC + duration_sec) * 1000))
 
+        # USB mics pop loudly for a moment when the stream opens; leave that out of the measurement.
+        readings = readings[int(MIC_WARMUP_SEC * self.sample_rate / self.block_size):]
         if readings:
-            ambient_mean = float(np.mean(readings))
+            # Median, so a stray click or bump doesn't raise the floor
+            ambient = float(np.median(readings))
             # Set threshold dynamically at 2.5x ambient noise or minimum config default
-            dynamic_threshold = max(config.VAD_ENERGY_THRESHOLD, ambient_mean * 2.5)
+            dynamic_threshold = max(config.VAD_ENERGY_THRESHOLD, ambient * 2.5)
             self.energy_threshold = dynamic_threshold
-            print(f"[Audio] Ambient noise: {ambient_mean:.4f} -> Dynamic threshold set to: {self.energy_threshold:.4f}")
+            print(f"[Audio] Ambient noise: {ambient:.4f} -> Dynamic threshold set to: {self.energy_threshold:.4f}")
         return self.energy_threshold
 
     def listen_for_speech(self) -> Optional[bytes]:

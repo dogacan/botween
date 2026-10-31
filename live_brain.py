@@ -22,7 +22,7 @@ from google import genai
 from google.genai import types
 
 import config
-from audio import AudioListener
+from audio import MIC_WARMUP_SEC, AudioListener
 from skelly_ble import find_output_device
 from voice_fx import VoiceFX
 
@@ -172,6 +172,7 @@ class LiveSkeleton:
         self.motion_armed = False       # motion can open a session (re-armed once the porch clears)
         self.last_session_end = 0.0
         self.in_conversation = False    # from the trigger until movement is switched back off
+        self.mic_ready_at = 0.0
         self.talk_movement_on = False   # talking-only parts (the arm) are on: a visitor spoke this conversation
         self._movement_task: Optional[asyncio.Task] = None
 
@@ -305,6 +306,7 @@ class LiveSkeleton:
         mic = sd.InputStream(samplerate=IN_RATE, channels=1, dtype="float32", blocksize=IN_BLOCK,
                              device=listener.device, callback=_mic_callback)
         mic.start()
+        self.mic_ready_at = time.monotonic() + MIC_WARMUP_SEC  # ignore the USB mic's start-up pop
         pump = asyncio.create_task(self._mic_pump(mic_queue))
         watcher = asyncio.create_task(self._motion_watch()) if self.motion else None
         if self.mode == "manual":
@@ -437,7 +439,7 @@ class LiveSkeleton:
             rms = float(np.sqrt(np.mean(block ** 2)))
             pcm = (np.clip(block[:, 0], -1.0, 1.0) * 32767).astype("<i2").tobytes()
             speaking = self.player.is_speaking
-            voice = rms > self.threshold and not speaking
+            voice = rms > self.threshold and not speaking and time.monotonic() >= self.mic_ready_at
 
             if voice:
                 self.last_voice_time = time.monotonic()
