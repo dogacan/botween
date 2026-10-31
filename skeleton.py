@@ -220,9 +220,9 @@ def run_skeleton(mode: str = "auto", show_preview: bool = False, no_camera: bool
         if mode == "auto":
             listener.calibrate_noise_floor(duration_sec=1.5)
 
-        # Initial spooky awakening
-        print("\n[Skeleton] Bonesy is awakening...")
-        tts.speak("<cackle> Hehehe! </cackle> The bones are alive! <whisper> Who approaches my porch on this dark night? </whisper>", block=True)
+        if config.STARTUP_GREETING:
+            print("\n[Skeleton] Bonesy is awakening...")
+            tts.speak("<cackle> Hehehe! </cackle> The bones are alive! <whisper> Who approaches my porch on this dark night? </whisper>", block=True)
         print("[Skeleton] Ready for trick-or-treaters!\n")
 
         def conversation():

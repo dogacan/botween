@@ -314,8 +314,11 @@ class LiveSkeleton:
             self._start_enter_thread(loop)
 
         try:
-            print("\n[Skeleton] Bonesy is awakening...")
-            await self._run_conversation(cue=GREETING_CUE, single_turn=True)
+            if config.STARTUP_GREETING:
+                print("\n[Skeleton] Bonesy is awakening...")
+                await self._run_conversation(cue=GREETING_CUE, single_turn=True)
+            else:
+                self.motion_armed = True  # no conversation yet, so nobody is standing there
             print(f"[Skeleton] Ready for trick-or-treaters! (Live model: {config.GEMINI_LIVE_MODEL})\n")
 
             while not self.stop_event.is_set():

@@ -69,7 +69,7 @@ python3 skeleton.py              # live engine, hands-free
 python3 skeleton.py --preview    # plus the camera preview window
 python3 skeleton.py --engine classic   # the original record → generate → TTS pipeline
 ```
-On startup Bonesy connects to the skeleton over BLE, turns on live mode, finds the `Skelly` audio output (falling back to the system default), and says an awakening line. When the mic hears a voice he opens a Live session, including the second of audio from just before the trigger. The session closes after `LIVE_IDLE_TIMEOUT_SEC` of quiet, so each visitor gets a fresh conversation.
+On startup Bonesy connects to the skeleton over BLE, turns on live mode, and finds the `Skelly` audio output (falling back to the system default). He stays quiet until someone shows up; set `STARTUP_GREETING=true` if you want an awakening line at startup (handy for checking the speaker). When the mic hears a voice he opens a Live session, including the second of audio from just before the trigger. The session closes after `LIVE_IDLE_TIMEOUT_SEC` of quiet, so each visitor gets a fresh conversation.
 
 ### Hardware controls from the terminal
 ```bash

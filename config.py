@@ -121,6 +121,9 @@ LIVE_ECHO_MIX = float(os.getenv("LIVE_ECHO_MIX", "0.2"))               # echo lo
 # Default conversation language (BCP-47). Bonesy only switches if a visitor clearly speaks another language.
 LIVE_LANGUAGE = os.getenv("LIVE_LANGUAGE", "en-US").strip() or "en-US"
 LIVE_BARGE_IN = _env_bool("LIVE_BARGE_IN", "false")                 # let visitors interrupt (needs no echo!)
+# Say an awakening line at startup. Off by default: motion detection greets visitors anyway, and the
+# line moves the skeleton right when the camera is learning what the empty porch looks like.
+STARTUP_GREETING = _env_bool("STARTUP_GREETING", "false")
 LIVE_KEEPALIVE_LEVEL = float(os.getenv("LIVE_KEEPALIVE_LEVEL", "0.001"))  # faint noise keeps BT speaker awake
 
 
