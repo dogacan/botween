@@ -82,6 +82,20 @@ class CryptReverb:
         return y * 0.75
 
 
+def apply_gain(pcm: bytes, gain: float, knee: float = 0.7) -> bytes:
+    """Makes int16 PCM louder. Above `knee` (fraction of full scale) peaks bend smoothly toward
+    full scale instead of hard-clipping, so a big boost doesn't crackle. Works chunk by chunk."""
+    if gain == 1.0 or not pcm:
+        return pcm
+    y = np.frombuffer(pcm, dtype="<i2").astype(np.float32) * (gain / 32768.0)
+    over = np.abs(y) > knee
+    if over.any():
+        room = 1.0 - knee
+        a = np.abs(y[over])
+        y[over] = np.sign(y[over]) * (knee + room * np.tanh((a - knee) / room))
+    return (np.clip(y, -1.0, 32767 / 32768) * 32768).astype("<i2").tobytes()
+
+
 class VoiceFX:
     """Pitch shift -> crypt reverb -> echo, on int16 PCM bytes."""
 

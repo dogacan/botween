@@ -25,7 +25,7 @@ import config
 from audio import MIC_WARMUP_SEC, AudioListener
 from recorder import NoRecorder, SessionRecorder
 from skelly_ble import find_output_device
-from voice_fx import VoiceFX
+from voice_fx import VoiceFX, apply_gain
 
 IN_RATE = 16000
 OUT_RATE = 24000
@@ -149,6 +149,7 @@ class VoicePlayer:
 
     def enqueue(self, pcm: bytes, voice: bool = True):
         """voice=False for the echo tail after a reply: it plays, but doesn't keep the mic muted."""
+        pcm = apply_gain(pcm, config.LIVE_OUTPUT_GAIN)
         with self._lock:
             self._buf += pcm
             if voice:

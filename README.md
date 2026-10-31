@@ -101,6 +101,7 @@ The frames are pictures of visitors, often kids, so recording is off by default 
 * `LIVE_KEEPALIVE_LEVEL` (default 0.001): faint noise between replies so the speaker doesn't clip his first word. Set it to 0 if you can hear it.
 * **Voice:** `LIVE_VOICE_NAME` (default `Algenib`, a gravelly voice that measured among the deepest of Gemini's 30 voices; `Alnilam`, `Gacrux` and `Umbriel` are similar).
 * **Voice FX** (`ENABLE_SPOOKY_FX=true`): `voice_fx.py` lowers the pitch by `LIVE_PITCH_SEMITONES` (default -3), adds the crypt reverb, and adds a repeating echo (`LIVE_ECHO_DELAY_MS`, `LIVE_ECHO_FEEDBACK`, `LIVE_ECHO_MIX`). It runs on the live stream and adds about 30 ms of delay.
+* `LIVE_OUTPUT_GAIN` (default 1.0): makes the voice louder before it goes to the speaker (2.0 is about twice as loud). Loud peaks are softly limited so they don't crackle. For the skeleton's own speaker volume, set `SKELLY_VOLUME` (0-255).
 * Stage tags in `prompt.md` (`<cackle>` etc.) are acted out by the Live voice directly. They still show up in the printed transcript, but he doesn't say them.
 * Use a wired or USB mic, not a Bluetooth one. Bluetooth mics switch macOS into low-quality headset mode.
 

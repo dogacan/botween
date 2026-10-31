@@ -133,6 +133,8 @@ LIVE_PITCH_SEMITONES = float(os.getenv("LIVE_PITCH_SEMITONES", "-3"))  # negativ
 LIVE_ECHO_DELAY_MS = float(os.getenv("LIVE_ECHO_DELAY_MS", "220"))      # time between echo repeats
 LIVE_ECHO_FEEDBACK = float(os.getenv("LIVE_ECHO_FEEDBACK", "0.35"))     # how much each repeat keeps (0-0.9)
 LIVE_ECHO_MIX = float(os.getenv("LIVE_ECHO_MIX", "0.2"))               # echo loudness; 0 = no echo
+# Voice loudness boost (1 = unchanged, 2 = about twice as loud). Peaks are softly limited instead of clipping.
+LIVE_OUTPUT_GAIN = float(os.getenv("LIVE_OUTPUT_GAIN", "1.0"))
 # Default conversation language (BCP-47). Bonesy only switches if a visitor clearly speaks another language.
 LIVE_LANGUAGE = os.getenv("LIVE_LANGUAGE", "en-US").strip() or "en-US"
 LIVE_BARGE_IN = _env_bool("LIVE_BARGE_IN", "false")                 # let visitors interrupt (needs no echo!)
