@@ -39,14 +39,10 @@ def load_system_instruction() -> str:
 SYSTEM_INSTRUCTION = load_system_instruction()
 
 # Hardware & Devices
-CAMERA_INDEX = int(os.getenv("CAMERA_INDEX", "0"))
-_raw_audio_device = os.getenv("AUDIO_INPUT_DEVICE", "").strip()
-if not _raw_audio_device:
-    AUDIO_INPUT_DEVICE = None
-elif _raw_audio_device.isdigit():
-    AUDIO_INPUT_DEVICE = int(_raw_audio_device)
-else:
-    AUDIO_INPUT_DEVICE = _raw_audio_device
+# Camera and mic: a device name (word match, see devices.py) or an index. List them with:
+#   python3 devices.py
+CAMERA_DEVICE = os.getenv("CAMERA_DEVICE", "USB Camera").strip()  # blank = camera 0
+MIC_DEVICE = os.getenv("MIC_DEVICE", "USB Camera").strip()        # blank = system default mic
 
 # Audio Recording & VAD
 SAMPLE_RATE = 16000  # 16kHz standard

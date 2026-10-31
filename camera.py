@@ -3,6 +3,7 @@ import time
 import cv2
 from typing import Optional, Tuple
 import config
+from devices import DeviceSpec, resolve_camera
 
 
 class Camera:
@@ -12,8 +13,10 @@ class Camera:
     get_latest_frame() always retrieves the instantaneous real-time frame.
     """
 
-    def __init__(self, camera_index: int = config.CAMERA_INDEX, max_dimension: int = 1280):
-        self.camera_index = camera_index
+    def __init__(self, camera: DeviceSpec = None, max_dimension: int = 1280):
+        # Name or index; None uses config.CAMERA_DEVICE. Resolved now, since indexes can shift.
+        self.camera_index, self.camera_name = resolve_camera(
+            config.CAMERA_DEVICE if camera is None else camera)
         self.max_dimension = max_dimension
         self.cap: Optional[cv2.VideoCapture] = None
         self.latest_frame = None
@@ -26,10 +29,10 @@ class Camera:
         if self.running:
             return
 
-        print(f"[Camera] Initializing camera device index {self.camera_index}...")
+        print(f"[Camera] Initializing camera [{self.camera_index}] {self.camera_name}...")
         self.cap = cv2.VideoCapture(self.camera_index)
         if not self.cap.isOpened():
-            print(f"[Camera] Warning: Could not open camera {self.camera_index}.")
+            print(f"[Camera] Warning: Could not open camera [{self.camera_index}] {self.camera_name}.")
             return
 
         # Request 1280x720 resolution for crisp costume recognition

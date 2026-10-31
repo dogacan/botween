@@ -32,6 +32,18 @@ This will:
 2. Calibrate and record a 3-second test from your microphone.
 3. Capture a snapshot from your webcam and save it to `test_snapshot.jpg`.
 
+### Choosing the camera and microphone
+
+Both default to the **USB Camera** (its mic shows up as "USB 2.0 Camera", which also matches). List what's connected:
+```bash
+python3 devices.py
+```
+Change the defaults in `.env` with `CAMERA_DEVICE` and `MIC_DEVICE`. Each takes a name (case-insensitive word match) or an index. A blank `MIC_DEVICE` uses the system default mic. To override them for one run, add `--camera` or `--mic`:
+```bash
+python3 skeleton.py --camera "MacBook Air Camera" --mic "MacBook Air Microphone"
+```
+If the chosen device isn't connected, Bonesy prints a warning and falls back to camera 0 and the system default mic.
+
 ---
 
 ## 💀 Ultra Skelly + Gemini Live (default engine)
@@ -96,6 +108,8 @@ python3 skeleton.py --mode auto
 ### Extra Flags
 * `--preview`: Opens a window with the **live camera feed on the left** and the **exact JPEG last sent to Gemini on the right** (with its resolution, size, and age), plus a status line (Listening / Thinking / Speaking). Press `Q` or `ESC` in the window to close it; Bonesy keeps running. Ctrl+C in the terminal quits everything.
 * `--no-camera`: Runs audio-only (no webcam snapshot). Cannot be combined with `--preview`.
+* `--camera NAME|INDEX` / `--mic NAME|INDEX`: Pick the camera or microphone for this run (overrides `CAMERA_DEVICE` / `MIC_DEVICE`).
+* `--list-devices`: Lists cameras and microphones, marks the selected ones, and exits.
 
 ## 🎭 Customizing the Skeleton Persona & Stage Directions
 

@@ -7,6 +7,7 @@ import sounddevice as sd
 
 import config
 import tts
+from devices import DeviceSpec, find_microphone, parse_spec
 
 
 def create_wav_bytes(audio_data: np.ndarray, sample_rate: int = config.SAMPLE_RATE) -> bytes:
@@ -38,19 +39,17 @@ class AudioListener:
         energy_threshold: float = config.VAD_ENERGY_THRESHOLD,
         silence_duration: float = config.SILENCE_DURATION_SEC,
         sample_rate: int = config.SAMPLE_RATE,
-        device=config.AUDIO_INPUT_DEVICE,
+        device: DeviceSpec = None,
     ):
         self.energy_threshold = energy_threshold
         self.silence_duration = silence_duration
         self.sample_rate = sample_rate
 
-        # Sanitize and resolve device to avoid matching empty strings against multiple devices
-        if isinstance(device, str):
-            device = device.strip()
-            if not device:
-                device = None
-            elif device.isdigit():
-                device = int(device)
+        # Name or index; None uses config.MIC_DEVICE. A blank setting means the system default.
+        wanted = parse_spec(config.MIC_DEVICE if device is None else device)
+        device = find_microphone(wanted)
+        if wanted is not None and device is None:
+            print(f"[Audio] Warning: no microphone matching '{wanted}'. Using the system default.")
 
         if device is None:
             # Never listen through the skeleton's Bluetooth "(Live)" link: macOS treats it as a

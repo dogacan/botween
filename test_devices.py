@@ -9,6 +9,7 @@ import config
 import tts
 from audio import AudioListener
 from camera import Camera
+from devices import list_cameras, list_microphones
 
 
 def test_spooky_tts(voice_override=None):
@@ -29,11 +30,9 @@ def test_spooky_tts(voice_override=None):
 def test_microphone():
     print("\n--- 2. Testing Microphone Input ---")
     print("Listing available input audio devices:")
-    devices = sd.query_devices()
-    for idx, d in enumerate(devices):
-        if d["max_input_channels"] > 0:
-            default_marker = " (Default)" if idx == sd.default.device[0] else ""
-            print(f"  [{idx}] {d['name']}{default_marker}")
+    for idx, name in list_microphones():
+        default_marker = " (Default)" if idx == sd.default.device[0] else ""
+        print(f"  [{idx}] {name}{default_marker}")
 
     listener = AudioListener()
     print("\nMeasuring ambient room noise for 1.5 seconds...")
@@ -59,7 +58,10 @@ def test_microphone():
 
 def test_camera():
     print("\n--- 3. Testing Webcam Capture ---")
-    cam = Camera(camera_index=config.CAMERA_INDEX)
+    print("Available cameras:")
+    for idx, name in list_cameras():
+        print(f"  [{idx}] {name}")
+    cam = Camera()
     cam.start()
     print("Waiting for camera to warm up...")
     time.sleep(1.0)
@@ -73,7 +75,7 @@ def test_camera():
         print(f"✅ Camera working! Captured snapshot ({len(jpeg_bytes) // 1024} KB).")
         print(f"Saved test image to: {out_path}")
     else:
-        print(f"⚠️ Warning: Could not capture frame from camera index {config.CAMERA_INDEX}.")
+        print(f"⚠️ Warning: Could not capture frame from camera [{cam.camera_index}] {cam.camera_name}.")
         print("Make sure Terminal / Python has Camera permissions in macOS System Settings.")
 
 
@@ -82,7 +84,13 @@ def main():
     parser = argparse.ArgumentParser(description="Botween Hardware & Audio Diagnostic")
     parser.add_argument("--voice", type=str, default=None, help="Test a specific Gemini voice (e.g. Puck, Charon, Fenrir, Kore)")
     parser.add_argument("--tts-only", action="store_true", help="Only test voice playback without mic/camera")
+    parser.add_argument("--camera", default=None, help="Camera name or index (default from CAMERA_DEVICE)")
+    parser.add_argument("--mic", default=None, help="Microphone name or index (default from MIC_DEVICE)")
     args = parser.parse_args()
+    if args.camera is not None:
+        config.CAMERA_DEVICE = args.camera
+    if args.mic is not None:
+        config.MIC_DEVICE = args.mic
 
     print("==========================================")
     print("   Botween Hardware & Audio Diagnostic   ")

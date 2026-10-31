@@ -262,5 +262,17 @@ if __name__ == "__main__":
         help="'live' streams through the Gemini Live API (low latency); 'classic' records, then calls generate_content + TTS.",
     )
 
+    parser.add_argument("--camera", help=f"Camera name or index (default from CAMERA_DEVICE: '{config.CAMERA_DEVICE}').")
+    parser.add_argument("--mic", help=f"Microphone name or index (default from MIC_DEVICE: '{config.MIC_DEVICE}').")
+    parser.add_argument("--list-devices", action="store_true", help="List cameras and microphones, then exit.")
+
     args = parser.parse_args()
+    if args.camera is not None:
+        config.CAMERA_DEVICE = args.camera
+    if args.mic is not None:
+        config.MIC_DEVICE = args.mic
+    if args.list_devices:
+        from devices import print_devices
+        print_devices()
+        sys.exit(0)
     run_skeleton(mode=args.mode, show_preview=args.preview, no_camera=args.no_camera, engine=args.engine)
