@@ -47,6 +47,8 @@ class MotionDetector:
         self._relearn = False
         self._present_since: Optional[float] = None
         self._last_movement = time.monotonic()
+        self._last_debug = 0.0
+        self._was_moving = False
         self._state = MotionState()
         self._lock = threading.Lock()
         self._running = False
@@ -143,12 +145,28 @@ class MotionDetector:
         ignored = area > config.MOTION_MAX_AREA
         self._relearn = ignored
         present = not ignored and area >= config.MOTION_MIN_AREA
+        held_for = (now - self._present_since) if self._present_since is not None else 0.0
         if present:
             if self._present_since is None:
                 self._present_since = now
         else:
+            if config.MOTION_DEBUG and self._present_since is not None:
+                print(f"[Motion debug] Lost it after {held_for:.1f}s of the {config.MOTION_SUSTAIN_SEC:g}s needed "
+                      f"(moving area dropped to {area:.1%}{', ignored' if ignored else ''}).")
             self._present_since = None
         visitor = present and (now - self._present_since) >= config.MOTION_SUSTAIN_SEC
+
+        if config.MOTION_DEBUG:
+            moving = area >= MIN_BLOB
+            if (moving and now - self._last_debug >= 0.5) or (self._was_moving and not moving):
+                self._last_debug = now
+                largest = max((bw * bh for _, _, bw, bh in boxes), default=0.0)
+                held = f"held {now - self._present_since:.1f}/{config.MOTION_SUSTAIN_SEC:g}s" if present else "not held"
+                print(f"[Motion debug] moving {area:5.1%} (need {config.MOTION_MIN_AREA:.1%}) | "
+                      f"{len(boxes)} blob(s), biggest box {largest:.1%} | {held} | "
+                      f"{'IGNORED (too much changed) | ' if ignored else ''}"
+                      f"quiet {now - self._last_movement:.1f}s{' | VISITOR' if visitor else ''}")
+            self._was_moving = moving
 
         with self._lock:
             if not ignored and area >= config.MOTION_MIN_AREA * STILL_FACTOR:

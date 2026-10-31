@@ -243,7 +243,8 @@ class LiveSkeleton:
                 prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=config.LIVE_VOICE_NAME))),
             system_instruction=instruction,
             tools=tools,
-            safety_settings=config.SAFETY_SETTINGS,
+            # No safety_settings here: the Live API rejects them at setup ("Unknown name safetySettings")
+            # and the session never opens. Live keeps its default filters; the prompt guardrails still apply.
             # Hint the visitor-side transcription toward the default language and Halloween phrases.
             input_audio_transcription=types.AudioTranscriptionConfig(
                 language_codes=[config.LIVE_LANGUAGE],
@@ -341,6 +342,7 @@ class LiveSkeleton:
 
     async def _motion_watch(self):
         """Opens a session when someone walks up, before they say anything."""
+        last_note = 0.0
         while True:
             await asyncio.sleep(0.1)
             if self.session is not None or self.connecting or self.trigger.is_set():
@@ -348,11 +350,22 @@ class LiveSkeleton:
             state = self.motion.snapshot()
             now = time.monotonic()
             if not self.motion_armed:
-                if (state.quiet_for >= config.MOTION_REARM_QUIET_SEC
-                        or now - self.last_session_end >= config.MOTION_REARM_MAX_SEC):
+                since_last = now - self.last_session_end
+                if state.quiet_for >= config.MOTION_REARM_QUIET_SEC or since_last >= config.MOTION_REARM_MAX_SEC:
                     self.motion_armed = True
+                    if config.MOTION_DEBUG:
+                        print(f"[Motion debug] Re-armed (porch still {state.quiet_for:.1f}s, "
+                              f"{since_last:.0f}s since the last conversation).")
+                elif config.MOTION_DEBUG and now - last_note >= 1.0:
+                    last_note = now
+                    print(f"[Motion debug] Not armed yet: porch still {state.quiet_for:.1f}/"
+                          f"{config.MOTION_REARM_QUIET_SEC:g}s, {since_last:.0f}/{config.MOTION_REARM_MAX_SEC:g}s "
+                          f"since the last conversation{' (a visitor is moving right now)' if state.visitor else ''}.")
                 continue
             if now < self.cooldown_until:
+                if config.MOTION_DEBUG and state.visitor and now - last_note >= 1.0:
+                    last_note = now
+                    print(f"[Motion debug] Visitor seen, but cooling down for {self.cooldown_until - now:.1f}s more.")
                 continue
             if state.visitor:
                 print(f"[Motion] Visitor spotted ({state.area:.0%} of the view moving). Waking Bonesy...")
