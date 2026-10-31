@@ -104,6 +104,7 @@ class VoicePlayer:
         self._buf = bytearray()
         self._lock = threading.Lock()
         self._last_voice = 0.0
+        self._voice_end = 0  # bytes from the buffer start to the end of the last voice chunk (not the echo tail)
         level = int(config.LIVE_KEEPALIVE_LEVEL * 32767)
         rng = np.random.default_rng(0)
         self._keepalive = (rng.integers(-level, level + 1, OUT_RATE, dtype=np.int16).tobytes() if level > 0 else b"")
@@ -129,7 +130,10 @@ class VoicePlayer:
         with self._lock:
             chunk = bytes(self._buf[:nbytes])
             del self._buf[:nbytes]
-        if chunk:
+            playing_voice = self._voice_end > 0
+            self._voice_end = max(0, self._voice_end - len(chunk))
+        # Only the voice itself starts the echo mute; the quiet echo tail after it doesn't extend it.
+        if playing_voice:
             self._last_voice = time.monotonic()
         if len(chunk) < nbytes:
             chunk += self._filler(nbytes - len(chunk))
@@ -142,19 +146,26 @@ class VoicePlayer:
         self.stream.stop()
         self.stream.close()
 
-    def enqueue(self, pcm: bytes):
+    def enqueue(self, pcm: bytes, voice: bool = True):
+        """voice=False for the echo tail after a reply: it plays, but doesn't keep the mic muted."""
         with self._lock:
             self._buf += pcm
+            if voice:
+                self._voice_end = len(self._buf)
 
     def clear(self):
         with self._lock:
             self._buf.clear()
+            self._voice_end = 0
 
     @property
     def is_speaking(self) -> bool:
-        """True while voice is buffered or played recently (covers the Bluetooth output delay)."""
+        """True while voice is buffered or played recently (covers the Bluetooth output delay).
+
+        The echo tail (~1 s) plays inside the LIVE_ECHO_TAIL_SEC window, so it isn't counted separately.
+        """
         with self._lock:
-            if self._buf:
+            if self._voice_end:
                 return True
         return (time.monotonic() - self._last_voice) < config.LIVE_ECHO_TAIL_SEC
 
@@ -194,6 +205,7 @@ class LiveSkeleton:
         self.rec = NoRecorder()         # records the current conversation when RECORD_SESSIONS is on
         self.talk_movement_on = False   # talking-only parts (the arm) are on: a visitor spoke this conversation
         self._movement_task: Optional[asyncio.Task] = None
+        self._tool_tasks: set = set()     # Bluetooth commands from tool calls that are still being sent
 
     # ---- helpers ---------------------------------------------------------
 
@@ -301,6 +313,9 @@ class LiveSkeleton:
                 automatic_activity_detection=types.AutomaticActivityDetection(
                     silence_duration_ms=config.LIVE_END_SILENCE_MS),
                 activity_handling=handling,
+                # Keep camera frames sent outside speech (e.g. right before the visitor's first words);
+                # by default Gemini may only see frames that arrive while someone is talking.
+                turn_coverage=types.TurnCoverage.TURN_INCLUDES_AUDIO_ACTIVITY_AND_ALL_VIDEO,
             ),
         )
 
@@ -398,6 +413,8 @@ class LiveSkeleton:
             self._session_ended()
             if self._movement_task:
                 await self._movement_task  # let a pending switch-on finish before switching back
+            if self._tool_tasks:  # same for movement sent by a tool call
+                await asyncio.gather(*self._tool_tasks, return_exceptions=True)
             if self.talk_movement_on:
                 await self._set_movement(config.SKELLY_IDLE_MOVEMENT)
             self.rec.close()
@@ -725,7 +742,7 @@ class LiveSkeleton:
                             self.fx = VoiceFX(OUT_RATE)  # drop any echo of the cut-off reply
                     if sc.turn_complete:
                         if self.fx:
-                            self.player.enqueue(self.fx.flush())  # let the echo ring out
+                            self.player.enqueue(self.fx.flush(), voice=False)  # let the echo ring out
                         if heard:
                             print(f"[Visitor] {''.join(heard).strip()}")
                             self.rec.event("visitor", text=''.join(heard).strip())
@@ -764,16 +781,24 @@ class LiveSkeleton:
                 if not self.skelly:
                     raise RuntimeError("body not connected")
                 if fc.name == "change_eye_color":
-                    await asyncio.wait_for(self.skelly.set_light_color(CHANNEL_HEAD, COLORS[args["color"]]), 3)
+                    command = self.skelly.set_light_color(CHANNEL_HEAD, COLORS[args["color"]])
                 elif fc.name == "move":
                     part = args["part"]
-                    if part != "all" and part not in config.SKELLY_MOVEMENT:
-                        raise ValueError(f"{part} movement is switched off")
-                    parts = config.SKELLY_MOVEMENT if part == "all" else [part]
-                    await asyncio.wait_for(self.skelly.move(movement_mask(parts)), 3)
+                    # The movement setting stays on the skeleton, so never narrow or widen it here: sending
+                    # just ["arm"] would freeze the head, and the arm must stay still until a visitor talks.
+                    # Re-sending the current setting makes the firmware do one movement with those parts.
+                    current = config.SKELLY_MOVEMENT if self.talk_movement_on else config.SKELLY_IDLE_MOVEMENT
+                    if part != "all" and part not in current:
+                        raise ValueError(f"{part} movement is switched off right now")
+                    if not current:
+                        raise ValueError("movement is switched off right now")
+                    command = self.skelly.move(movement_mask(current))
                 else:
                     raise ValueError(f"unknown tool {fc.name}")
-                print(f"[Skelly] {fc.name}({args})")
+                # Don't wait for Bluetooth here: this loop also receives Bonesy's voice.
+                task = asyncio.create_task(self._run_tool(fc.name, dict(args), command))
+                self._tool_tasks.add(task)
+                task.add_done_callback(self._tool_tasks.discard)
             except Exception as e:
                 print(f"[Skelly] {fc.name} failed: {e}")
                 result = {"error": str(e)}
@@ -781,3 +806,10 @@ class LiveSkeleton:
             responses.append(types.FunctionResponse(id=fc.id, name=fc.name, response=result))
         if responses:
             await session.send_tool_response(function_responses=responses)
+
+    async def _run_tool(self, name: str, args: dict, command):
+        try:
+            await asyncio.wait_for(command, 3)
+            print(f"[Skelly] {name}({args})")
+        except Exception as e:
+            print(f"[Skelly] {name} failed: {e}")
