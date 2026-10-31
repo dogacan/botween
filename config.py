@@ -42,12 +42,27 @@ def load_jokes() -> list[str]:
     return [joke for group in groups for joke in group if isinstance(joke, str) and joke.strip()]
 
 
+_joke_deck: list[str] = []  # shuffled jokes not dealt yet; refilled when it runs low
+_last_bag: list[str] = []   # the jokes the previous visitor got
+
+
 def pick_jokes() -> str:
-    """A fresh random handful of jokes as a bullet list, so each visitor hears different ones."""
+    """The next handful of jokes from a shuffled deck, so back-to-back visitors get different ones."""
+    global _joke_deck
     jokes = load_jokes()
     if not jokes:
         return "- (The joke bag is empty tonight. Make up your own bone puns!)"
-    picked = random.sample(jokes, min(JOKES_PER_SESSION, len(jokes)))
+    count = min(JOKES_PER_SESSION, len(jokes))
+    _joke_deck = [joke for joke in _joke_deck if joke in jokes]  # jokes.json may have been edited
+    if len(_joke_deck) < count:
+        # Reshuffle without the leftovers so a joke can't be dealt twice in one bag.
+        fresh = [joke for joke in jokes if joke not in _joke_deck]
+        random.shuffle(fresh)
+        # ...and the last visitor's jokes go to the bottom, so the next visitor doesn't get them again.
+        fresh.sort(key=lambda joke: joke in _last_bag)
+        _joke_deck += fresh
+    picked, _joke_deck = _joke_deck[:count], _joke_deck[count:]
+    _last_bag[:] = picked
     return "\n".join(f"- {joke}" for joke in picked)
 
 
