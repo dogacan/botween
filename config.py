@@ -1,4 +1,6 @@
+import json
 import os
+import random
 from pathlib import Path
 from dotenv import load_dotenv
 from google.genai import types
@@ -24,13 +26,39 @@ AUDIO_TEMP_DIR.mkdir(exist_ok=True)
 
 # Prompt Configuration
 PROMPT_FILE = BASE_DIR / os.getenv("PROMPT_FILE", "prompt.md")
+JOKES_FILE = BASE_DIR / os.getenv("JOKES_FILE", "jokes.json")
+JOKES_PER_SESSION = int(os.getenv("JOKES_PER_SESSION", "5"))
+JOKES_PLACEHOLDER = "{{JOKES}}"
+
+
+def load_jokes() -> list[str]:
+    """Reads jokes.json: either a plain list of jokes or {category: [jokes]}."""
+    try:
+        data = json.loads(JOKES_FILE.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"[Config] Warning: Failed to read {JOKES_FILE}: {e}")
+        return []
+    groups = data.values() if isinstance(data, dict) else [data]
+    return [joke for group in groups for joke in group if isinstance(joke, str) and joke.strip()]
+
+
+def pick_jokes() -> str:
+    """A fresh random handful of jokes as a bullet list, so each visitor hears different ones."""
+    jokes = load_jokes()
+    if not jokes:
+        return "- (The joke bag is empty tonight. Make up your own bone puns!)"
+    picked = random.sample(jokes, min(JOKES_PER_SESSION, len(jokes)))
+    return "\n".join(f"- {joke}" for joke in picked)
 
 
 def load_system_instruction() -> str:
-    """Loads the skeleton prompt from prompt.md, falling back to a default if missing."""
+    """Loads the skeleton prompt from prompt.md, filling {{JOKES}} with a random set from jokes.json."""
     if PROMPT_FILE.exists():
         try:
-            return PROMPT_FILE.read_text(encoding="utf-8").strip()
+            prompt = PROMPT_FILE.read_text(encoding="utf-8").strip()
+            if JOKES_PLACEHOLDER in prompt:
+                prompt = prompt.replace(JOKES_PLACEHOLDER, pick_jokes())
+            return prompt
         except Exception as e:
             print(f"[Config] Warning: Failed to read {PROMPT_FILE}: {e}")
     return "You are Bonesy, an enchanted, witty talking skeleton for Halloween."
