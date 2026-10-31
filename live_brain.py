@@ -84,6 +84,12 @@ VISITOR_CUE = ("(Stage cue: someone just walked up to your porch. Greet them wit
 # Used when a noise woke him but nobody spoke; the camera has already seen someone, so no "nobody here" escape.
 SILENT_VISITOR_CUE = ("(Stage cue: a trick-or-treater is standing at your porch right now; the attached picture "
                       "shows them. Greet them with one short, playful remark about their costume.)")
+# Once per conversation, when a visitor stays and says nothing. The frame lets him skip it if they've left.
+JOKE_CUE = ("(Stage cue: the visitor is still standing there without saying a word; the attached picture shows "
+            "your porch right now. Tell them one short joke from your joke bag to get them talking. Pick one they "
+            "don't have to answer, so no knock-knock jokes. Only if the picture clearly shows an empty porch, with "
+            "no person or part of a person anywhere, reply with just a soft chuckle instead.)")
+JOKE_SEEN_SEC = 4.0           # the joke needs movement in view within this many seconds (after Bonesy stopped)
 GOODBYE_TIMEOUT_SEC = 10.0  # close anyway if the goodbye never arrives
 FALLBACK_GREET_SEC = 2.5      # no words heard this long after a sound woke him -> greet whoever is there
 FALLBACK_AFTER_SOUND_SEC = 2.5  # ...and the last sound was this long ago (Gemini reports words ~2 s after speech)
@@ -543,6 +549,9 @@ class LiveSkeleton:
                 fallback_at = (session_start + FALLBACK_GREET_SEC
                                if not cue_sent and self.motion and not greeting else None)
                 fallback_greeted = False
+                joke_told = False
+                joke_skip_noted = False
+                spoke_until = time.monotonic()  # when Bonesy last stopped talking (incl. the echo tail)
                 self.heard_words = False
                 self.session = session
                 self.connecting = False
@@ -556,11 +565,12 @@ class LiveSkeleton:
                 try:
                     while not self.stop_event.is_set() and not receiver.done():
                         await asyncio.sleep(0.25)
+                        now = time.monotonic()
                         if self.player.is_speaking:
+                            spoke_until = now
                             continue
                         if single_turn and self.turn_done:
                             break
-                        now = time.monotonic()
                         if now - self.last_activity > config.LIVE_IDLE_TIMEOUT_SEC:
                             self.note("[Live] Visitor moved on. Closing session for the next trick-or-treater! 🎃")
                             break
@@ -578,8 +588,27 @@ class LiveSkeleton:
                                 fallback_at = None
                                 fallback_greeted = True
                                 await self._send_cue_with_frame(session, SILENT_VISITOR_CUE)
+                        # Someone is still standing there in silence after his line: try one joke.
+                        if (config.MOTION_JOKE_AFTER_SEC > 0 and self.motion and not greeting and not joke_told
+                                and fallback_at is None and not self.closing and self.turn_count
+                                and self.turn_done and self.awaiting_first_audio
+                                and now - max(spoke_until, self.last_voice_time) >= config.MOTION_JOKE_AFTER_SEC):
+                            moved_ago = self.motion.snapshot().quiet_for
+                            # Only movement since he stopped counts; his own head moves while he talks.
+                            if moved_ago <= JOKE_SEEN_SEC and now - moved_ago > spoke_until:
+                                self.note("[Live] Visitor is still here but quiet. Telling them a joke.")
+                                joke_told = True
+                                self.turn_done = False
+                                self.last_activity = now
+                                await self._send_cue_with_frame(session, JOKE_CUE)
+                                continue
+                            if not joke_skip_noted:
+                                joke_skip_noted = True
+                                if config.MOTION_DEBUG:
+                                    print(f"[Motion debug] Quiet, but nothing moved since Bonesy stopped "
+                                          f"(still {moved_ago:.1f}s). No joke yet.")
                         if ((motion_visit or fallback_greeted) and self.turn_done and not self.heard_words
-                                and now - self.last_activity > config.MOTION_SILENT_TIMEOUT_SEC):
+                                and now - max(self.last_activity, spoke_until) > config.MOTION_SILENT_TIMEOUT_SEC):
                             self.note("[Live] Visitor never said a word. Closing session for the next trick-or-treater! 🎃")
                             break
                         if self.closing:

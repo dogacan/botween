@@ -152,7 +152,8 @@ MOTION_SUSTAIN_SEC = float(os.getenv("MOTION_SUSTAIN_SEC", "0.5"))  # motion mus
 MOTION_REARM_QUIET_SEC = float(os.getenv("MOTION_REARM_QUIET_SEC", "3"))  # porch still this long -> watch again
 MOTION_REARM_MAX_SEC = float(os.getenv("MOTION_REARM_MAX_SEC", "30"))      # ...or this long after the last session
 MOTION_SILENT_TIMEOUT_SEC = float(os.getenv("MOTION_SILENT_TIMEOUT_SEC", "10"))  # close if visitor never talks
-MOTION_ROI = _env_roi("MOTION_ROI")                                 # optional 'x,y,w,h' area to watch
+MOTION_JOKE_AFTER_SEC = float(os.getenv("MOTION_JOKE_AFTER_SEC", "6"))  # quiet visitor still in view -> one joke (0 = off)
+MOTION_ROI = _env_roi("MOTION_ROI")                                # optional 'x,y,w,h' area to watch
 MOTION_DEBUG = _env_bool("MOTION_DEBUG", "false")                   # print motion readings twice a second
 
 # Ultra Skelly hardware

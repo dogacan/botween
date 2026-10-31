@@ -107,6 +107,8 @@ The frames are pictures of visitors, often kids, so recording is off by default 
 ### Motion trigger (greets visitors as they walk up)
 In auto mode the camera also wakes Bonesy, so kids who just grab candy without a word still get a costume comment. `motion.py` watches the porch locally (nothing is sent to Gemini until someone shows up). When a person-sized area keeps moving for half a second, it opens a Live session, sends a fresh frame and tells Bonesy that someone walked up. If the visitor starts talking first, their words lead instead. If they never say anything, the session closes `MOTION_SILENT_TIMEOUT_SEC` after his line.
 
+If a visitor stays quiet for `MOTION_JOKE_AFTER_SEC` (default 6) after Bonesy speaks and the camera still sees them moving, he tells them one joke from the joke bag to get them talking. This happens at most once per conversation, and works the same whether the conversation started with motion or with voice. He gets a fresh frame with the cue, so if they've already left he just chuckles. Set it to `0` to turn it off.
+
 After each visitor, motion waits until the porch has been still for `MOTION_REARM_QUIET_SEC` (or `MOTION_REARM_MAX_SEC` have passed) so the same kid doesn't set him off twice. Voice still works as before.
 
 Tune it with `--preview`: moving areas are boxed (green once they count as a visitor) and the footer shows how much of the view is moving.
