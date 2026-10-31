@@ -151,13 +151,25 @@ SKELLY_BLE_ENABLED = _env_bool("SKELLY_BLE_ENABLED", "true")
 SKELLY_BLE_ADDRESS = os.getenv("SKELLY_BLE_ADDRESS", "").strip()    # optional; macOS uses UUIDs, not MACs
 SKELLY_BLE_NAME = os.getenv("SKELLY_BLE_NAME", "").strip()          # optional name hint, e.g. "Ultra Skelly v2"
 SKELLY_VOLUME = os.getenv("SKELLY_VOLUME", "").strip()              # optional 0-255, set at startup
-# Body parts allowed to move (head, arm, torso, all or none), set on the skeleton at startup.
-# Enabled parts keep moving whenever it plays sound, even between runs. The torso is left out by
-# default because it shakes the camera view and throws off motion detection.
-_raw_movement = os.getenv("SKELLY_MOVEMENT", "head,arm").strip().lower()
-SKELLY_MOVEMENT = [] if _raw_movement in ("", "none", "false", "off") else (
-    ["head", "arm", "torso"] if _raw_movement == "all"
-    else [p for p in ("head", "arm", "torso") if p in {v.strip() for v in _raw_movement.split(",")}])
+
+
+def _env_parts(name: str, default: str):
+    """Parses a body-part list like 'head,arm' (or 'all' / 'none') into a list of part names."""
+    raw = os.getenv(name, default).strip().lower()
+    if raw in ("", "none", "false", "off"):
+        return []
+    if raw == "all":
+        return ["head", "arm", "torso"]
+    wanted = {v.strip() for v in raw.split(",")}
+    return [p for p in ("head", "arm", "torso") if p in wanted]
+
+
+# Body parts that move (head, arm, torso, all or none). Enabled parts move whenever the skeleton plays
+# sound, and the setting stays on the skeleton between runs, so Bonesy always sets it explicitly.
+# SKELLY_MOVEMENT is used during conversations; SKELLY_IDLE_MOVEMENT between visitors, so a moving arm
+# can't set off motion detection. The torso is off by default because it shakes the camera view.
+SKELLY_MOVEMENT = _env_parts("SKELLY_MOVEMENT", "head,arm")
+SKELLY_IDLE_MOVEMENT = [p for p in _env_parts("SKELLY_IDLE_MOVEMENT", "head") if p in SKELLY_MOVEMENT]
 # Output device for the voice (substring match). Falls back to the system default if not found.
 SKELLY_AUDIO_OUTPUT = os.getenv("SKELLY_AUDIO_OUTPUT", "Skelly").strip()
 

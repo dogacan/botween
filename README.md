@@ -81,7 +81,7 @@ python3 skelly_ble.py move none      # switch all body movement off
 ```
 While talking, Gemini can also call `change_eye_color` itself for dramatic effect.
 
-Gemini can call `move` too, but only for the parts in `SKELLY_MOVEMENT` (default `head,arm`). Bonesy sets this on the skeleton at startup because it stays on between runs, and enabled parts move whenever the skeleton plays sound. The torso is left out by default because it shakes the camera view and throws off motion detection. Use `head,arm,torso`, `all` or `none` to change it.
+Gemini can call `move` too, but only for the parts in `SKELLY_MOVEMENT` (default `head,arm`). The skeleton moves every enabled part whenever it plays sound, and the setting stays on it between runs, so Bonesy sets it himself: `SKELLY_MOVEMENT` while he's talking to a visitor, and `SKELLY_IDLE_MOVEMENT` (default `head`) between visitors. Anything that moves between visitors can set off motion detection, which is why the arm only moves during conversations and the torso is off entirely. Each takes `head`, `arm`, `torso`, a comma-separated list, `all` or `none`.
 
 ### Live tuning (`.env`)
 * `LIVE_END_SILENCE_MS` (default 800): how long a pause ends the visitor's turn. Lower is snappier but may cut kids off.

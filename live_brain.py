@@ -171,6 +171,7 @@ class LiveSkeleton:
         self.trigger_reason = "voice"   # what opened the next session: voice, motion or manual
         self.motion_armed = False       # motion can open a session (re-armed once the porch clears)
         self.last_session_end = 0.0
+        self.in_conversation = False    # from switching movement on until it's switched back off
 
     # ---- helpers ---------------------------------------------------------
 
@@ -200,10 +201,9 @@ class LiveSkeleton:
             if config.SKELLY_VOLUME:
                 await skelly.set_volume(int(config.SKELLY_VOLUME))
             # The movement setting persists on the skeleton between runs, so always set it explicitly.
-            await skelly.move(movement_mask(config.SKELLY_MOVEMENT))
-            off = [p for p in ("head", "arm", "torso") if p not in config.SKELLY_MOVEMENT]
-            print(f"[Skelly] Movement on: {', '.join(config.SKELLY_MOVEMENT) or 'none'}"
-                  f"{'; off: ' + ', '.join(off) if off else ''} (SKELLY_MOVEMENT).")
+            await skelly.move(movement_mask(config.SKELLY_IDLE_MOVEMENT))
+            print(f"[Skelly] Movement while talking: {', '.join(config.SKELLY_MOVEMENT) or 'none'}; "
+                  f"between visitors: {', '.join(config.SKELLY_IDLE_MOVEMENT) or 'none'}.")
             return skelly
         except Exception as e:
             print(f"[Skelly] Bluetooth control unavailable ({e}). Continuing without it.")
@@ -310,8 +310,7 @@ class LiveSkeleton:
 
         try:
             print("\n[Skeleton] Bonesy is awakening...")
-            await self._conversation(cue=GREETING_CUE, single_turn=True)
-            self._session_ended()
+            await self._run_conversation(cue=GREETING_CUE, single_turn=True)
             print(f"[Skeleton] Ready for trick-or-treaters! (Live model: {config.GEMINI_LIVE_MODEL})\n")
 
             while not self.stop_event.is_set():
@@ -325,11 +324,7 @@ class LiveSkeleton:
                 except asyncio.TimeoutError:
                     continue
                 self.trigger.clear()
-                if self.trigger_reason == "motion":
-                    await self._conversation(cue=VISITOR_CUE)
-                else:
-                    await self._conversation()
-                self._session_ended()
+                await self._run_conversation(cue=VISITOR_CUE if self.trigger_reason == "motion" else None)
                 self.trigger_reason = "voice"
                 if self.mode == "manual":
                     self._start_enter_thread(loop)
@@ -354,6 +349,28 @@ class LiveSkeleton:
 
         threading.Thread(target=_wait_enter, daemon=True).start()
 
+    async def _run_conversation(self, **kwargs):
+        """One conversation, with the talking-only body parts (the arm) enabled just for its duration."""
+        talking_only = config.SKELLY_MOVEMENT != config.SKELLY_IDLE_MOVEMENT
+        self.in_conversation = True  # keeps voice and motion from queuing another trigger meanwhile
+        try:
+            if talking_only:
+                await self._set_movement(config.SKELLY_MOVEMENT)
+            await self._conversation(**kwargs)
+        finally:
+            self._session_ended()
+            if talking_only:
+                await self._set_movement(config.SKELLY_IDLE_MOVEMENT)
+            self.in_conversation = False
+
+    async def _set_movement(self, parts: List[str]):
+        if not self.skelly:
+            return
+        try:
+            await asyncio.wait_for(self.skelly.move(movement_mask(parts)), 3)
+        except Exception as e:
+            print(f"[Skelly] Couldn't set movement to {', '.join(parts) or 'none'}: {e}")
+
     def _session_ended(self):
         """The visitor is usually still standing there, so motion waits for the porch to clear."""
         self.last_session_end = time.monotonic()
@@ -364,7 +381,7 @@ class LiveSkeleton:
         last_note = 0.0
         while True:
             await asyncio.sleep(0.1)
-            if self.session is not None or self.connecting or self.trigger.is_set():
+            if self.in_conversation or self.trigger.is_set():
                 continue
             state = self.motion.snapshot()
             now = time.monotonic()
@@ -423,7 +440,7 @@ class LiveSkeleton:
                 loud_blocks = loud_blocks + 1 if voice else 0
                 cooling_down = time.monotonic() < self.cooldown_until
                 if (self.mode == "auto" and loud_blocks >= TRIGGER_BLOCKS and not self.trigger.is_set()
-                        and not cooling_down):
+                        and not cooling_down and not self.in_conversation):
                     print(f"[Audio] Voice detected (RMS {rms:.4f}). Waking Bonesy...")
                     self.trigger_reason = "voice"
                     self.trigger.set()
