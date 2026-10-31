@@ -127,7 +127,7 @@ python3 skeleton.py --mode auto
 ## 🎭 Customizing the Skeleton Persona & Stage Directions
 
 The skeleton's personality, costume observation instructions, and stage directions are in **[`prompt.md`](prompt.md)**.
-* **Jokes**: Bonesy's jokes live in **[`jokes.json`](jokes.json)**, grouped by category (a plain list works too). Each visitor session picks `JOKES_PER_SESSION` (default 5) at random and drops them into the `{{JOKES}}` spot in `prompt.md`, so Bonesy doesn't tell everyone the same one.
+* **Jokes**: Bonesy's jokes live in **[`jokes.json`](jokes.json)**, grouped by category (a plain list works too). Each visitor session picks `JOKES_PER_SESSION` (default 5) at random and drops them into the `{{JOKES}}` spot in `prompt.md`, so Bonesy doesn't tell everyone the same one. Jokes can carry square-bracket delivery cues like `[short pause]`, `[sighs]` or `[excited]`; the prompt tells Bonesy to act these out rather than say them, and the edge-tts fallback strips them.
 * **Stage Direction Cues**: Bonesy uses inline theatrical tags that the voice engine acts out:
   * `<gasp>`: A sharp, audible gasp upon seeing a visitor or costume.
   * `<whisper> ... </whisper>`: Leaning in close to whisper secrets or riddles.

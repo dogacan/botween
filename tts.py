@@ -35,8 +35,10 @@ def stop_speaking():
 
 
 def strip_stage_tags(text: str) -> str:
-    """Strips <whisper>, <cackle>, etc. so fallback TTS engines don't read them aloud."""
+    """Strips <whisper>, [short pause], *stress* marks, etc. so fallback TTS engines don't read them aloud."""
     cleaned = re.sub(r"</?[a-zA-Z_\-]+>", " ", text)
+    cleaned = re.sub(r"\[[a-zA-Z _\-]+\]", " ", cleaned)
+    cleaned = cleaned.replace("*", "")
     return " ".join(cleaned.split())
 
 
