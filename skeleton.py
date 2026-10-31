@@ -272,6 +272,12 @@ if __name__ == "__main__":
         help="Don't let camera motion wake Bonesy (voice only).",
     )
     parser.add_argument(
+        "--record",
+        action="store_true",
+        help="Save each conversation (transcripts and the frames sent to Gemini) for replay.py "
+             "(or set RECORD_SESSIONS=true).",
+    )
+    parser.add_argument(
         "--motion-debug",
         action="store_true",
         help="Print motion readings twice a second to tune the trigger (or set MOTION_DEBUG=true).",
@@ -292,6 +298,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.motion_debug:
         config.MOTION_DEBUG = True
+    if args.record:
+        config.RECORD_SESSIONS = True
     if args.rotate_180:
         config.CAMERA_ROTATE_180 = True
     if args.camera is not None:

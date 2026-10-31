@@ -83,6 +83,15 @@ While talking, Gemini can also call `change_eye_color` itself for dramatic effec
 
 Gemini can call `move` too, but only for the parts in `SKELLY_MOVEMENT` (default `head,arm`). The skeleton moves every enabled part whenever it plays sound, and the setting stays on it between runs, so Bonesy sets it himself: `SKELLY_IDLE_MOVEMENT` (default `head`) until a visitor speaks, and `SKELLY_MOVEMENT` once they do. So the arm stays still between visitors, during the startup greeting and while greeting someone who walked up, and only starts moving when a kid talks to him. Anything that moves when nobody is talking can set off motion detection, which is why the torso is off entirely. Each takes `head`, `arm`, `torso`, a comma-separated list, `all` or `none`.
 
+### Recording and replay
+Run with `--record` (or `RECORD_SESSIONS=true`) to keep each conversation in `recordings/<date>/<time>_<trigger>/`: a timeline (`events.jsonl`) of what woke Bonesy, the cues he got, what the visitor and Bonesy said (Gemini's transcripts; the audio itself isn't kept), his eye and body moves and why the conversation ended, plus every camera frame sent to Gemini and the prompt he had.
+```bash
+python3 replay.py                    # list recordings
+python3 replay.py latest             # print the newest one's timeline
+python3 replay.py latest --show      # play it back in real time with the frames (Q to stop)
+```
+The frames are pictures of visitors, often kids, so recording is off by default and `recordings/` is git-ignored. Delete it when you're done.
+
 ### Live tuning (`.env`)
 * `LIVE_END_SILENCE_MS` (default 800): how long a pause ends the visitor's turn. Lower is snappier but may cut kids off.
 * `LIVE_ECHO_TAIL_SEC` (default 1.2): the mic stays muted this long after Bonesy stops, so he doesn't hear himself through the Bluetooth delay.
