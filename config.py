@@ -166,8 +166,8 @@ def _env_parts(name: str, default: str):
 
 # Body parts that move (head, arm, torso, all or none). Enabled parts move whenever the skeleton plays
 # sound, and the setting stays on the skeleton between runs, so Bonesy always sets it explicitly.
-# SKELLY_MOVEMENT is used during conversations; SKELLY_IDLE_MOVEMENT between visitors, so a moving arm
-# can't set off motion detection. The torso is off by default because it shakes the camera view.
+# SKELLY_IDLE_MOVEMENT is used until a visitor speaks (between visitors, the startup greeting and motion
+# greetings), so a moving arm can't set off motion detection; SKELLY_MOVEMENT once a visitor talks. The torso is off by default because it shakes the camera view.
 SKELLY_MOVEMENT = _env_parts("SKELLY_MOVEMENT", "head,arm")
 SKELLY_IDLE_MOVEMENT = [p for p in _env_parts("SKELLY_IDLE_MOVEMENT", "head") if p in SKELLY_MOVEMENT]
 # Output device for the voice (substring match). Falls back to the system default if not found.

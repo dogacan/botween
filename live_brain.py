@@ -171,7 +171,9 @@ class LiveSkeleton:
         self.trigger_reason = "voice"   # what opened the next session: voice, motion or manual
         self.motion_armed = False       # motion can open a session (re-armed once the porch clears)
         self.last_session_end = 0.0
-        self.in_conversation = False    # from switching movement on until it's switched back off
+        self.in_conversation = False    # from the trigger until movement is switched back off
+        self.talk_movement_on = False   # talking-only parts (the arm) are on: a visitor spoke this conversation
+        self._movement_task: Optional[asyncio.Task] = None
 
     # ---- helpers ---------------------------------------------------------
 
@@ -202,8 +204,8 @@ class LiveSkeleton:
                 await skelly.set_volume(int(config.SKELLY_VOLUME))
             # The movement setting persists on the skeleton between runs, so always set it explicitly.
             await skelly.move(movement_mask(config.SKELLY_IDLE_MOVEMENT))
-            print(f"[Skelly] Movement while talking: {', '.join(config.SKELLY_MOVEMENT) or 'none'}; "
-                  f"between visitors: {', '.join(config.SKELLY_IDLE_MOVEMENT) or 'none'}.")
+            print(f"[Skelly] Movement once a visitor speaks: {', '.join(config.SKELLY_MOVEMENT) or 'none'}; "
+                  f"otherwise: {', '.join(config.SKELLY_IDLE_MOVEMENT) or 'none'}.")
             return skelly
         except Exception as e:
             print(f"[Skelly] Bluetooth control unavailable ({e}). Continuing without it.")
@@ -324,7 +326,8 @@ class LiveSkeleton:
                 except asyncio.TimeoutError:
                     continue
                 self.trigger.clear()
-                await self._run_conversation(cue=VISITOR_CUE if self.trigger_reason == "motion" else None)
+                await self._run_conversation(voice_started=self.trigger_reason == "voice",
+                                             cue=VISITOR_CUE if self.trigger_reason == "motion" else None)
                 self.trigger_reason = "voice"
                 if self.mode == "manual":
                     self._start_enter_thread(loop)
@@ -349,19 +352,35 @@ class LiveSkeleton:
 
         threading.Thread(target=_wait_enter, daemon=True).start()
 
-    async def _run_conversation(self, **kwargs):
-        """One conversation, with the talking-only body parts (the arm) enabled just for its duration."""
-        talking_only = config.SKELLY_MOVEMENT != config.SKELLY_IDLE_MOVEMENT
+    async def _run_conversation(self, voice_started: bool = False, **kwargs):
+        """One conversation. The talking-only parts (the arm) stay still until a visitor speaks.
+
+        voice_started: a visitor's voice opened this conversation, so they switch on right away.
+        """
         self.in_conversation = True  # keeps voice and motion from queuing another trigger meanwhile
+        self.talk_movement_on = False
+        self._movement_task = None
         try:
-            if talking_only:
-                await self._set_movement(config.SKELLY_MOVEMENT)
+            if voice_started:
+                self._visitor_spoke()
             await self._conversation(**kwargs)
         finally:
             self._session_ended()
-            if talking_only:
+            if self._movement_task:
+                await self._movement_task  # let a pending switch-on finish before switching back
+            if self.talk_movement_on:
                 await self._set_movement(config.SKELLY_IDLE_MOVEMENT)
             self.in_conversation = False
+
+    def _visitor_spoke(self):
+        """A visitor is talking: let the talking-only parts move for the rest of this conversation."""
+        talking_only = [p for p in config.SKELLY_MOVEMENT if p not in config.SKELLY_IDLE_MOVEMENT]
+        if self.talk_movement_on or not self.in_conversation or not talking_only:
+            return
+        self.talk_movement_on = True
+        if self.skelly:
+            print(f"[Skelly] Visitor is talking: {', '.join(talking_only)} movement on.")
+        self._movement_task = asyncio.create_task(self._set_movement(config.SKELLY_MOVEMENT))
 
     async def _set_movement(self, parts: List[str]):
         if not self.skelly:
@@ -411,6 +430,7 @@ class LiveSkeleton:
     async def _mic_pump(self, queue: asyncio.Queue):
         """Single consumer of mic audio: pre-roll while idle, stream while a session is open."""
         loud_blocks = 0
+        talk_blocks = 0
         silence = bytes(IN_BLOCK * 2)
         while True:
             block = await queue.get()
@@ -421,6 +441,10 @@ class LiveSkeleton:
 
             if voice:
                 self.last_voice_time = time.monotonic()
+            # A visitor talking during a conversation lets the arm move (needs 150 ms, like the trigger).
+            talk_blocks = talk_blocks + 1 if (voice and self.in_conversation) else 0
+            if talk_blocks >= TRIGGER_BLOCKS:
+                self._visitor_spoke()
 
             if self.session is not None:
                 if voice:
