@@ -173,6 +173,7 @@ class LiveSkeleton:
         self.last_session_end = 0.0
         self.in_conversation = False    # from the trigger until movement is switched back off
         self.mic_ready_at = 0.0
+        self.last_frame_time = 0.0      # when the last camera frame went to Gemini (per conversation)
         self.talk_movement_on = False   # talking-only parts (the arm) are on: a visitor spoke this conversation
         self._movement_task: Optional[asyncio.Task] = None
 
@@ -493,17 +494,20 @@ class LiveSkeleton:
             async with self.client.aio.live.connect(model=config.GEMINI_LIVE_MODEL, config=self._live_config()) as session:
                 session_start = time.monotonic()
                 print(f"[Live] Session open ({session_start - t0:.2f}s).")
-                await self._send_frame(session)
+                self.last_frame_time = 0.0
+                if cue is None:
+                    await self._send_frame(session)  # a visitor is talking: let Gemini see them
                 while self.pending:
                     await session.send_realtime_input(
                         audio=types.Blob(data=self.pending.pop(0), mime_type=f"audio/pcm;rate={IN_RATE}"))
                 if motion_visit and self.last_voice_time >= t0 - 1.0:
                     # They spoke while we were connecting; their words start the turn, no cue needed.
                     print("[Live] Visitor is already talking. Letting them go first.")
+                    await self._send_frame(session)
                 elif motion_visit:
-                    await self._send_cue_with_frame(session, cue)
+                    await self._send_cue_with_frame(session, cue)  # the frame travels with the cue
                 elif cue:
-                    await session.send_realtime_input(text=cue)
+                    await session.send_realtime_input(text=cue)  # startup greeting: no frame needed
                 self.session = session
                 self.connecting = False
                 self.awaiting_first_audio = True
@@ -511,7 +515,8 @@ class LiveSkeleton:
                 self.status("Live: listening")
 
                 receiver = asyncio.create_task(self._receive(session))
-                video = asyncio.create_task(self._video_loop(session))
+                # The startup greeting doesn't look at anyone, so it gets no frames.
+                video = asyncio.create_task(self._video_loop(session) if not greeting else asyncio.sleep(0))
                 try:
                     while not self.stop_event.is_set() and not receiver.done():
                         await asyncio.sleep(0.25)
@@ -568,24 +573,31 @@ class LiveSkeleton:
         jpeg = self.cam.get_latest_jpeg_bytes(max_dimension=config.LIVE_VIDEO_MAX_DIM) if self.cam else None
         if jpeg:
             parts.append(types.Part.from_bytes(data=jpeg, mime_type="image/jpeg"))
+            self.last_frame_time = time.monotonic()
             if self.preview:
                 self.preview.update_sent(jpeg)
         parts.append(types.Part(text=cue))
         await session.send_client_content(turns=types.Content(role="user", parts=parts), turn_complete=True)
 
     async def _send_frame(self, session):
-        if not self.cam:
+        """Sends the current camera frame, unless one went out less than LIVE_VIDEO_INTERVAL_SEC ago."""
+        if not self.cam or time.monotonic() - self.last_frame_time < config.LIVE_VIDEO_INTERVAL_SEC:
             return
         jpeg = self.cam.get_latest_jpeg_bytes(max_dimension=config.LIVE_VIDEO_MAX_DIM)
         if jpeg:
             await session.send_realtime_input(video=types.Blob(data=jpeg, mime_type="image/jpeg"))
+            self.last_frame_time = time.monotonic()
             if self.preview:
                 self.preview.update_sent(jpeg)
 
     async def _video_loop(self, session):
-        interval = 1.0 / max(0.1, min(1.0, config.LIVE_VIDEO_FPS))
+        """Keeps Gemini's view fresh during a conversation, one frame per LIVE_VIDEO_INTERVAL_SEC."""
+        if not self.cam:
+            return
+        interval = config.LIVE_VIDEO_INTERVAL_SEC
         while True:
-            await asyncio.sleep(interval)
+            wait = self.last_frame_time + interval - time.monotonic()
+            await asyncio.sleep(wait if wait > 0 else interval)
             try:
                 await self._send_frame(session)
             except Exception:

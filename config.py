@@ -101,7 +101,9 @@ ENGINE = os.getenv("ENGINE", "live").strip().lower()
 
 # Gemini Live API
 GEMINI_LIVE_MODEL = os.getenv("GEMINI_LIVE_MODEL", "gemini-3.8-live")
-LIVE_VIDEO_FPS = float(os.getenv("LIVE_VIDEO_FPS", "1.0"))          # Live API accepts at most 1 frame/s
+# Camera frames sent during a conversation: at most one every this many seconds (Live allows 1/s).
+# A fresh frame also goes out when a conversation opens, so a longer gap mostly saves tokens.
+LIVE_VIDEO_INTERVAL_SEC = max(1.0, float(os.getenv("LIVE_VIDEO_INTERVAL_SEC", "5")))
 LIVE_VIDEO_MAX_DIM = int(os.getenv("LIVE_VIDEO_MAX_DIM", "768"))    # smaller frames = fewer tokens
 LIVE_IDLE_TIMEOUT_SEC = float(os.getenv("LIVE_IDLE_TIMEOUT_SEC", "25"))  # close session -> next visitor
 LIVE_MAX_TURNS = int(os.getenv("LIVE_MAX_TURNS", "6"))                  # max turns per visitor before memory reset
