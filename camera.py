@@ -13,10 +13,11 @@ class Camera:
     get_latest_frame() always retrieves the instantaneous real-time frame.
     """
 
-    def __init__(self, camera: DeviceSpec = None, max_dimension: int = 1280):
+    def __init__(self, camera: DeviceSpec = None, max_dimension: int = 1280, rotate_180: Optional[bool] = None):
         # Name or index; None uses config.CAMERA_DEVICE. Resolved now, since indexes can shift.
         self.camera_index, self.camera_name = resolve_camera(
             config.CAMERA_DEVICE if camera is None else camera)
+        self.rotate_180 = config.CAMERA_ROTATE_180 if rotate_180 is None else rotate_180
         self.max_dimension = max_dimension
         self.cap: Optional[cv2.VideoCapture] = None
         self.latest_frame = None
@@ -42,12 +43,15 @@ class Camera:
         self.running = True
         self.thread = threading.Thread(target=self._capture_loop, daemon=True)
         self.thread.start()
-        print("[Camera] Background camera feed started.")
+        print(f"[Camera] Background camera feed started{' (rotated 180°)' if self.rotate_180 else ''}.")
 
     def _capture_loop(self):
         while self.running and self.cap and self.cap.isOpened():
             ret, frame = self.cap.read()
             if ret and frame is not None:
+                # Rotate here so the preview, motion detection and Gemini all see it upright
+                if self.rotate_180:
+                    frame = cv2.rotate(frame, cv2.ROTATE_180)
                 with self.lock:
                     self.latest_frame = frame
             time.sleep(0.03)  # ~30 FPS

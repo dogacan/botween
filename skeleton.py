@@ -281,8 +281,12 @@ if __name__ == "__main__":
     parser.add_argument("--camera", help=f"Camera name or index (default from CAMERA_DEVICE: '{config.CAMERA_DEVICE}').")
     parser.add_argument("--mic", help=f"Microphone name or index (default from MIC_DEVICE: '{config.MIC_DEVICE}').")
     parser.add_argument("--list-devices", action="store_true", help="List cameras and microphones, then exit.")
+    parser.add_argument("--rotate-180", action="store_true",
+                        help="Rotate the camera picture 180° (for an upside-down mount; or set CAMERA_ROTATE_180=true).")
 
     args = parser.parse_args()
+    if args.rotate_180:
+        config.CAMERA_ROTATE_180 = True
     if args.camera is not None:
         config.CAMERA_DEVICE = args.camera
     if args.mic is not None:

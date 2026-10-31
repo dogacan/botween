@@ -71,6 +71,8 @@ SYSTEM_INSTRUCTION = load_system_instruction()
 #   python3 devices.py
 CAMERA_DEVICE = os.getenv("CAMERA_DEVICE", "USB Camera").strip()  # blank = camera 0
 MIC_DEVICE = os.getenv("MIC_DEVICE", "USB Camera").strip()        # blank = system default mic
+# Turn the picture right side up when the camera is mounted upside down
+CAMERA_ROTATE_180 = os.getenv("CAMERA_ROTATE_180", "false").strip().lower() in ("true", "1", "yes")
 
 # Audio Recording & VAD
 SAMPLE_RATE = 16000  # 16kHz standard

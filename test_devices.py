@@ -86,7 +86,10 @@ def main():
     parser.add_argument("--tts-only", action="store_true", help="Only test voice playback without mic/camera")
     parser.add_argument("--camera", default=None, help="Camera name or index (default from CAMERA_DEVICE)")
     parser.add_argument("--mic", default=None, help="Microphone name or index (default from MIC_DEVICE)")
+    parser.add_argument("--rotate-180", action="store_true", help="Rotate the camera picture 180° (or set CAMERA_ROTATE_180=true)")
     args = parser.parse_args()
+    if args.rotate_180:
+        config.CAMERA_ROTATE_180 = True
     if args.camera is not None:
         config.CAMERA_DEVICE = args.camera
     if args.mic is not None:

@@ -44,6 +44,8 @@ python3 skeleton.py --camera "MacBook Air Camera" --mic "MacBook Air Microphone"
 ```
 If the chosen device isn't connected, Bonesy prints a warning and falls back to camera 0 and the system default mic.
 
+If the camera is mounted upside down, set `CAMERA_ROTATE_180=true` in `.env` (or add `--rotate-180`). The preview, motion detection and Gemini then all see the picture right side up.
+
 ---
 
 ## 💀 Ultra Skelly + Gemini Live (default engine)
@@ -123,6 +125,7 @@ python3 skeleton.py --mode auto
 * `--no-motion`: Only voice wakes Bonesy; camera motion is ignored.
 * `--camera NAME|INDEX` / `--mic NAME|INDEX`: Pick the camera or microphone for this run (overrides `CAMERA_DEVICE` / `MIC_DEVICE`).
 * `--list-devices`: Lists cameras and microphones, marks the selected ones, and exits.
+* `--rotate-180`: Rotates the camera picture 180° for an upside-down mount (same as `CAMERA_ROTATE_180=true`).
 
 ## 🎭 Customizing the Skeleton Persona & Stage Directions
 
