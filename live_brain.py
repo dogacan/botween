@@ -6,6 +6,7 @@ Mic (16 kHz PCM) + camera (JPEG, <= 1 fps) stream into a Live session, and the m
 
 One Live session per visitor: local voice detection opens a session (with ~1 s of pre-roll
 so the first words aren't lost), and it closes after LIVE_IDLE_TIMEOUT_SEC of quiet.
+Camera motion (motion.py) can also open a session, so Bonesy greets visitors as they walk up.
 That keeps memory per trick-or-treater and stays well inside the Live API session limits.
 """
 
@@ -64,6 +65,9 @@ You can control your animatronic body with tools: `change_eye_color` makes your 
 GREETING_CUE = "(Stage cue: you just woke up on the porch. Say one short, spooky awakening line.)"
 GOODBYE_CUE = ("(Stage cue: this visitor's time is up. Say one short, friendly goodbye "
                "and tell them to rattle on to the next house.)")
+VISITOR_CUE = ("(Stage cue: someone just walked up to your porch. Greet them with one short, playful "
+               "remark about their costume. If you can't actually see anyone, just let out a low, "
+               "eerie chuckle and say nothing else.)")
 GOODBYE_TIMEOUT_SEC = 10.0  # close anyway if the goodbye never arrives
 
 
@@ -130,11 +134,12 @@ class VoicePlayer:
 
 
 class LiveSkeleton:
-    def __init__(self, mode: str, cam, preview, stop_event: threading.Event):
+    def __init__(self, mode: str, cam, preview, stop_event: threading.Event, motion=None):
         self.mode = mode
         self.cam = cam
         self.preview = preview
         self.stop_event = stop_event
+        self.motion = motion if mode == "auto" else None
         self.client = genai.Client(api_key=config.GEMINI_API_KEY)
         self.skelly = None
         self.player: Optional[VoicePlayer] = None
@@ -153,6 +158,9 @@ class LiveSkeleton:
         self.closing = False        # saying goodbye at a cap: the mic sends silence
         self.cooldown_until = 0.0   # voice can't open a new session before this time
         self.threshold = config.VAD_ENERGY_THRESHOLD
+        self.trigger_reason = "voice"   # what opened the next session: voice, motion or manual
+        self.motion_armed = False       # motion can open a session (re-armed once the porch clears)
+        self.last_session_end = 0.0
 
     # ---- helpers ---------------------------------------------------------
 
@@ -276,27 +284,39 @@ class LiveSkeleton:
                              device=listener.device, callback=_mic_callback)
         mic.start()
         pump = asyncio.create_task(self._mic_pump(mic_queue))
+        watcher = asyncio.create_task(self._motion_watch()) if self.motion else None
         if self.mode == "manual":
             self._start_enter_thread(loop)
 
         try:
             print("\n[Skeleton] Bonesy is awakening...")
-            await self._conversation(greeting=True)
+            await self._conversation(cue=GREETING_CUE, single_turn=True)
+            self._session_ended()
             print(f"[Skeleton] Ready for trick-or-treaters! (Live model: {config.GEMINI_LIVE_MODEL})\n")
 
             while not self.stop_event.is_set():
-                self.status("Waiting for ENTER (manual mode)" if self.mode == "manual"
-                            else "Listening for trick-or-treaters...")
+                if self.mode == "manual":
+                    self.status("Waiting for ENTER (manual mode)")
+                else:
+                    self.status("Watching and listening for trick-or-treaters..." if self.motion
+                                else "Listening for trick-or-treaters...")
                 try:
                     await asyncio.wait_for(self.trigger.wait(), 0.5)
                 except asyncio.TimeoutError:
                     continue
                 self.trigger.clear()
-                await self._conversation()
+                if self.trigger_reason == "motion":
+                    await self._conversation(cue=VISITOR_CUE)
+                else:
+                    await self._conversation()
+                self._session_ended()
+                self.trigger_reason = "voice"
                 if self.mode == "manual":
                     self._start_enter_thread(loop)
         finally:
             pump.cancel()
+            if watcher:
+                watcher.cancel()
             mic.stop()
             mic.close()
             self.player.stop()
@@ -309,9 +329,35 @@ class LiveSkeleton:
                 input("\n[Manual Mode] Press [ENTER] to start a conversation...")
             except EOFError:
                 return
+            self.trigger_reason = "manual"
             loop.call_soon_threadsafe(self.trigger.set)
 
         threading.Thread(target=_wait_enter, daemon=True).start()
+
+    def _session_ended(self):
+        """The visitor is usually still standing there, so motion waits for the porch to clear."""
+        self.last_session_end = time.monotonic()
+        self.motion_armed = False
+
+    async def _motion_watch(self):
+        """Opens a session when someone walks up, before they say anything."""
+        while True:
+            await asyncio.sleep(0.1)
+            if self.session is not None or self.connecting or self.trigger.is_set():
+                continue
+            state = self.motion.snapshot()
+            now = time.monotonic()
+            if not self.motion_armed:
+                if (state.quiet_for >= config.MOTION_REARM_QUIET_SEC
+                        or now - self.last_session_end >= config.MOTION_REARM_MAX_SEC):
+                    self.motion_armed = True
+                continue
+            if now < self.cooldown_until:
+                continue
+            if state.visitor:
+                print(f"[Motion] Visitor spotted ({state.area:.0%} of the view moving). Waking Bonesy...")
+                self.trigger_reason = "motion"
+                self.trigger.set()
 
     async def _mic_pump(self, queue: asyncio.Queue):
         """Single consumer of mic audio: pre-roll while idle, stream while a session is open."""
@@ -347,11 +393,18 @@ class LiveSkeleton:
                 if (self.mode == "auto" and loud_blocks >= TRIGGER_BLOCKS and not self.trigger.is_set()
                         and not cooling_down):
                     print(f"[Audio] Voice detected (RMS {rms:.4f}). Waking Bonesy...")
+                    self.trigger_reason = "voice"
                     self.trigger.set()
                     loud_blocks = 0
 
-    async def _conversation(self, greeting: bool = False):
-        """Opens one Live session and keeps it until the visitor goes quiet."""
+    async def _conversation(self, cue: Optional[str] = None, single_turn: bool = False):
+        """Opens one Live session and keeps it until the visitor goes quiet.
+
+        cue: stage direction that makes Bonesy speak first (startup greeting, visitor walked up).
+        single_turn: close as soon as that first reply is done (startup greeting).
+        """
+        greeting = cue == GREETING_CUE
+        motion_visit = cue == VISITOR_CUE
         self.pending = [] if greeting else list(self.preroll)
         self.preroll.clear()
         self.connecting = True
@@ -366,11 +419,14 @@ class LiveSkeleton:
                 session_start = time.monotonic()
                 print(f"[Live] Session open ({session_start - t0:.2f}s).")
                 await self._send_frame(session)
-                if greeting:
-                    await session.send_realtime_input(text=GREETING_CUE)
                 while self.pending:
                     await session.send_realtime_input(
                         audio=types.Blob(data=self.pending.pop(0), mime_type=f"audio/pcm;rate={IN_RATE}"))
+                if motion_visit and self.last_voice_time >= t0 - 1.0:
+                    # They spoke while we were connecting; their words start the turn, no cue needed.
+                    print("[Live] Visitor is already talking. Letting them go first.")
+                elif cue:
+                    await session.send_realtime_input(text=cue)
                 self.session = session
                 self.connecting = False
                 self.awaiting_first_audio = True
@@ -384,11 +440,15 @@ class LiveSkeleton:
                         await asyncio.sleep(0.25)
                         if self.player.is_speaking:
                             continue
-                        if greeting and self.turn_done:
+                        if single_turn and self.turn_done:
                             break
                         now = time.monotonic()
                         if now - self.last_activity > config.LIVE_IDLE_TIMEOUT_SEC:
                             print("[Live] Visitor moved on. Closing session for the next trick-or-treater! 🎃")
+                            break
+                        if (motion_visit and self.turn_done and self.last_voice_time < session_start
+                                and now - self.last_activity > config.MOTION_SILENT_TIMEOUT_SEC):
+                            print("[Live] Visitor never said a word. Closing session for the next trick-or-treater! 🎃")
                             break
                         if self.closing:
                             if self.turn_done or now > goodbye_deadline:

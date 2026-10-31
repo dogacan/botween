@@ -168,7 +168,8 @@ def interaction_loop(mode, brain, listener, cam, preview, stop_event):
         stop_event.set()  # make sure the GUI loop (if any) exits too
 
 
-def run_skeleton(mode: str = "auto", show_preview: bool = False, no_camera: bool = False, engine: str = config.ENGINE):
+def run_skeleton(mode: str = "auto", show_preview: bool = False, no_camera: bool = False, engine: str = config.ENGINE,
+                 no_motion: bool = False):
     print("=" * 60)
     print("      💀 BONESY THE TALKING SKELETON - BOTWEEN 🎃")
     print("=" * 60)
@@ -195,14 +196,22 @@ def run_skeleton(mode: str = "auto", show_preview: bool = False, no_camera: bool
         cam = Camera()
         cam.start()
 
-    preview = Preview(cam) if (show_preview and cam) else None
+    # Camera motion wakes Bonesy as visitors walk up (live engine, auto mode only).
+    motion = None
+    if cam and engine == "live" and mode == "auto" and config.MOTION_ENABLED and not no_motion:
+        from motion import MotionDetector
+
+        motion = MotionDetector(cam)
+        motion.start()
+
+    preview = Preview(cam, motion) if (show_preview and cam) else None
     stop_event = threading.Event()
 
     if engine == "live":
         from live_brain import LiveSkeleton
 
         # Live engine handles Skelly Bluetooth, mic calibration and the awakening line itself.
-        conversation = LiveSkeleton(mode, cam, preview, stop_event).run_blocking
+        conversation = LiveSkeleton(mode, cam, preview, stop_event, motion=motion).run_blocking
     else:
         brain = SkeletonBrain(config.GEMINI_API_KEY)
         listener = AudioListener()
@@ -232,6 +241,8 @@ def run_skeleton(mode: str = "auto", show_preview: bool = False, no_camera: bool
     finally:
         stop_event.set()
         print("\n[Skeleton] Powering down. Happy Halloween!")
+        if motion:
+            motion.stop()
         if cam:
             cam.stop()
 
@@ -256,6 +267,11 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--no-motion",
+        action="store_true",
+        help="Don't let camera motion wake Bonesy (voice only).",
+    )
+    parser.add_argument(
         "--engine",
         choices=["live", "classic"],
         default=config.ENGINE if config.ENGINE in ("live", "classic") else "live",
@@ -275,4 +291,5 @@ if __name__ == "__main__":
         from devices import print_devices
         print_devices()
         sys.exit(0)
-    run_skeleton(mode=args.mode, show_preview=args.preview, no_camera=args.no_camera, engine=args.engine)
+    run_skeleton(mode=args.mode, show_preview=args.preview, no_camera=args.no_camera, engine=args.engine,
+                 no_motion=args.no_motion)

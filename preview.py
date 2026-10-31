@@ -32,6 +32,20 @@ def _labeled(pane: np.ndarray, label: str, color) -> np.ndarray:
     return np.vstack([bar, pane])
 
 
+def draw_motion(frame: np.ndarray, state, roi=None) -> str:
+    """Draws the motion boxes (and watched area) on the frame in place; returns a status label."""
+    h, w = frame.shape[:2]
+    if roi:
+        x, y, rw, rh = roi
+        cv2.rectangle(frame, (int(x * w), int(y * h)), (int((x + rw) * w), int((y + rh) * h)), (255, 160, 60), 1)
+    color = (80, 220, 120) if state.visitor else (0, 200, 255)
+    for x, y, bw, bh in state.boxes:
+        cv2.rectangle(frame, (int(x * w), int(y * h)), (int((x + bw) * w), int((y + bh) * h)), color, 2)
+    if state.ignored:
+        return f"Motion {state.area:.0%} (ignored: lighting/shake)"
+    return f"Motion {state.area:.1%}{'  VISITOR' if state.visitor else ''}"
+
+
 def compose_canvas(
     live_frame: Optional[np.ndarray],
     sent_jpeg: Optional[bytes],
@@ -80,8 +94,9 @@ class Preview:
     The worker only touches the thread-safe `update_sent()` / `set_status()` methods.
     """
 
-    def __init__(self, camera):
+    def __init__(self, camera, motion=None):
         self.camera = camera
+        self.motion = motion
         self._lock = threading.Lock()
         self._sent_jpeg: Optional[bytes] = None
         self._sent_time: Optional[float] = None
@@ -106,6 +121,8 @@ class Preview:
                 with self._lock:
                     sent, sent_time, status = self._sent_jpeg, self._sent_time, self._status
                 age = (time.time() - sent_time) if sent_time else None
+                if self.motion and live is not None:
+                    status = f"{status}  |  {draw_motion(live, self.motion.snapshot(), self.motion.roi)}"
 
                 cv2.imshow(WINDOW_NAME, compose_canvas(live, sent, age, status))
                 key = cv2.waitKey(33) & 0xFF

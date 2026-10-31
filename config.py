@@ -91,6 +91,30 @@ LIVE_LANGUAGE = os.getenv("LIVE_LANGUAGE", "en-US").strip() or "en-US"
 LIVE_BARGE_IN = _env_bool("LIVE_BARGE_IN", "false")                 # let visitors interrupt (needs no echo!)
 LIVE_KEEPALIVE_LEVEL = float(os.getenv("LIVE_KEEPALIVE_LEVEL", "0.001"))  # faint noise keeps BT speaker awake
 
+
+def _env_roi(name: str):
+    """Parses 'x,y,w,h' (fractions of the frame, 0-1) into a tuple, or None when unset."""
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return None
+    try:
+        x, y, w, h = (float(v) for v in raw.split(","))
+    except ValueError:
+        print(f"[Config] Warning: {name}='{raw}' should be 'x,y,w,h' fractions. Watching the whole frame.")
+        return None
+    return (x, y, w, h)
+
+
+# Camera motion trigger (live engine, auto mode): Bonesy greets visitors as they walk up.
+MOTION_ENABLED = _env_bool("MOTION_ENABLED", "true")
+MOTION_MIN_AREA = float(os.getenv("MOTION_MIN_AREA", "0.03"))      # moving share of frame that counts as a person
+MOTION_MAX_AREA = float(os.getenv("MOTION_MAX_AREA", "0.5"))       # more than this = headlights/lights/shake, ignored
+MOTION_SUSTAIN_SEC = float(os.getenv("MOTION_SUSTAIN_SEC", "0.5"))  # motion must last this long
+MOTION_REARM_QUIET_SEC = float(os.getenv("MOTION_REARM_QUIET_SEC", "3"))  # porch still this long -> watch again
+MOTION_REARM_MAX_SEC = float(os.getenv("MOTION_REARM_MAX_SEC", "30"))      # ...or this long after the last session
+MOTION_SILENT_TIMEOUT_SEC = float(os.getenv("MOTION_SILENT_TIMEOUT_SEC", "10"))  # close if visitor never talks
+MOTION_ROI = _env_roi("MOTION_ROI")                                 # optional 'x,y,w,h' area to watch
+
 # Ultra Skelly hardware
 SKELLY_BLE_ENABLED = _env_bool("SKELLY_BLE_ENABLED", "true")
 SKELLY_BLE_ADDRESS = os.getenv("SKELLY_BLE_ADDRESS", "").strip()    # optional; macOS uses UUIDs, not MACs

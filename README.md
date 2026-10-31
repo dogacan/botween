@@ -89,6 +89,18 @@ While talking, Gemini can also call `change_eye_color` and `move` itself for dra
 * Stage tags in `prompt.md` (`<cackle>` etc.) are acted out by the Live voice directly. They still show up in the printed transcript, but he doesn't say them.
 * Use a wired or USB mic, not a Bluetooth one. Bluetooth mics switch macOS into low-quality headset mode.
 
+### Motion trigger (greets visitors as they walk up)
+In auto mode the camera also wakes Bonesy, so kids who just grab candy without a word still get a costume comment. `motion.py` watches the porch locally (nothing is sent to Gemini until someone shows up). When a person-sized area keeps moving for half a second, it opens a Live session, sends a fresh frame and tells Bonesy that someone walked up. If the visitor starts talking first, their words lead instead. If they never say anything, the session closes `MOTION_SILENT_TIMEOUT_SEC` after his line.
+
+After each visitor, motion waits until the porch has been still for `MOTION_REARM_QUIET_SEC` (or `MOTION_REARM_MAX_SEC` have passed) so the same kid doesn't set him off twice. Voice still works as before.
+
+Tune it with `--preview`: moving areas are boxed (green once they count as a visitor) and the footer shows how much of the view is moving.
+* `MOTION_MIN_AREA` (default 0.03): share of the frame that must move. Raise it if people on the sidewalk trigger him; lower it if kids get close before he notices.
+* `MOTION_MAX_AREA` (default 0.5): bigger changes are treated as headlights, a porch light or camera shake, and ignored.
+* `MOTION_SUSTAIN_SEC` (default 0.5): how long motion must last.
+* `MOTION_ROI`: optional `x,y,width,height` area to watch, as fractions of the frame (for example `0.2,0.3,0.6,0.7` to skip the street at the top). Shown as a blue box in the preview.
+* `MOTION_ENABLED=false` or `--no-motion` turns it off. Manual mode and the classic engine don't use it.
+
 ---
 
 ## 🏃‍♂️ Running the Skeleton
@@ -108,6 +120,7 @@ python3 skeleton.py --mode auto
 ### Extra Flags
 * `--preview`: Opens a window with the **live camera feed on the left** and the **exact JPEG last sent to Gemini on the right** (with its resolution, size, and age), plus a status line (Listening / Thinking / Speaking). Press `Q` or `ESC` in the window to close it; Bonesy keeps running. Ctrl+C in the terminal quits everything.
 * `--no-camera`: Runs audio-only (no webcam snapshot). Cannot be combined with `--preview`.
+* `--no-motion`: Only voice wakes Bonesy; camera motion is ignored.
 * `--camera NAME|INDEX` / `--mic NAME|INDEX`: Pick the camera or microphone for this run (overrides `CAMERA_DEVICE` / `MIC_DEVICE`).
 * `--list-devices`: Lists cameras and microphones, marks the selected ones, and exits.
 
