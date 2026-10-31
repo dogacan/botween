@@ -76,9 +76,18 @@ GREETING_CUE = "(Stage cue: you just woke up on the porch. Say one short, spooky
 GOODBYE_CUE = ("(Stage cue: this visitor's time is up. Say one short, friendly goodbye "
                "and tell them to rattle on to the next house.)")
 VISITOR_CUE = ("(Stage cue: someone just walked up to your porch. Greet them with one short, playful "
-               "remark about their costume. If you can't actually see anyone, just let out a low, "
-               "eerie chuckle and say nothing else.)")
+               "remark about their costume; if they aren't wearing one, tease them as a mysterious mortal "
+               "in disguise. Only if the picture shows no person at all, reply with just a low, eerie "
+               "chuckle this time. Either way, if anyone talks to you afterwards, answer them normally "
+               "as Bonesy.)")
+# Used when a noise woke him but nobody spoke; the camera has already seen someone, so no "nobody here" escape.
+SILENT_VISITOR_CUE = ("(Stage cue: a trick-or-treater is standing at your porch right now; the attached picture "
+                      "shows them. Greet them with one short, playful remark about their costume.)")
 GOODBYE_TIMEOUT_SEC = 10.0  # close anyway if the goodbye never arrives
+FALLBACK_GREET_SEC = 2.5      # no words heard this long after a sound woke him -> greet whoever is there
+FALLBACK_AFTER_SOUND_SEC = 2.5  # ...and the last sound was this long ago (Gemini reports words ~2 s after speech)
+FALLBACK_GIVE_UP_SEC = 15.0   # sound never stopped: someone is probably talking, so don't step on them
+FALLBACK_SEEN_SEC = 5.0       # "someone is here" = the camera saw movement within this many seconds
 
 
 class VoicePlayer:
@@ -174,6 +183,7 @@ class LiveSkeleton:
         self.in_conversation = False    # from the trigger until movement is switched back off
         self.mic_ready_at = 0.0
         self.last_frame_time = 0.0      # when the last camera frame went to Gemini (per conversation)
+        self.heard_words = False        # Gemini transcribed words from the visitor (per conversation)
         self.talk_movement_on = False   # talking-only parts (the arm) are on: a visitor spoke this conversation
         self._movement_task: Optional[asyncio.Task] = None
 
@@ -503,14 +513,24 @@ class LiveSkeleton:
                 while self.pending:
                     await session.send_realtime_input(
                         audio=types.Blob(data=self.pending.pop(0), mime_type=f"audio/pcm;rate={IN_RATE}"))
+                cue_sent = True
                 if motion_visit and self.last_voice_time >= t0 - 1.0:
                     # They spoke while we were connecting; their words start the turn, no cue needed.
                     print("[Live] Visitor is already talking. Letting them go first.")
                     await self._send_frame(session)
+                    cue_sent = False
                 elif motion_visit:
                     await self._send_cue_with_frame(session, cue)  # the frame travels with the cue
                 elif cue:
                     await session.send_realtime_input(text=cue)  # startup greeting: no frame needed
+                else:
+                    cue_sent = False
+                # The mic can mistake footsteps or a rustling bag for talking. If Gemini hasn't heard any
+                # words by then and someone is in view, greet them anyway.
+                fallback_at = (session_start + FALLBACK_GREET_SEC
+                               if not cue_sent and self.motion and not greeting else None)
+                fallback_greeted = False
+                self.heard_words = False
                 self.session = session
                 self.connecting = False
                 self.awaiting_first_audio = True
@@ -531,7 +551,21 @@ class LiveSkeleton:
                         if now - self.last_activity > config.LIVE_IDLE_TIMEOUT_SEC:
                             print("[Live] Visitor moved on. Closing session for the next trick-or-treater! 🎃")
                             break
-                        if (motion_visit and self.turn_done and self.last_voice_time < session_start
+                        if fallback_at and now >= fallback_at:
+                            if (self.heard_words or not self.awaiting_first_audio or self.turn_count
+                                    or now > session_start + FALLBACK_GIVE_UP_SEC):
+                                fallback_at = None  # they did talk, he's already answering, or it's too late
+                            elif now - self.last_voice_time < FALLBACK_AFTER_SOUND_SEC:
+                                pass  # recent sound: they may be talking, give Gemini time to report words
+                            elif self.motion.snapshot().quiet_for > FALLBACK_SEEN_SEC:
+                                print("[Live] Only heard noise, and nobody is in view. Staying quiet.")
+                                fallback_at = None
+                            else:
+                                print("[Live] No words heard, but someone is here. Greeting them.")
+                                fallback_at = None
+                                fallback_greeted = True
+                                await self._send_cue_with_frame(session, SILENT_VISITOR_CUE)
+                        if ((motion_visit or fallback_greeted) and self.turn_done and not self.heard_words
                                 and now - self.last_activity > config.MOTION_SILENT_TIMEOUT_SEC):
                             print("[Live] Visitor never said a word. Closing session for the next trick-or-treater! 🎃")
                             break
@@ -577,6 +611,8 @@ class LiveSkeleton:
         if jpeg:
             parts.append(types.Part.from_bytes(data=jpeg, mime_type="image/jpeg"))
             self.last_frame_time = time.monotonic()
+            if config.MOTION_DEBUG:  # keep the greeting frame so you can see what Gemini saw
+                (config.AUDIO_TEMP_DIR / "last_greeting_frame.jpg").write_bytes(jpeg)
             if self.preview:
                 self.preview.update_sent(jpeg)
         parts.append(types.Part(text=cue))
@@ -620,6 +656,8 @@ class LiveSkeleton:
                 if sc:
                     if sc.input_transcription and sc.input_transcription.text:
                         heard.append(sc.input_transcription.text)
+                        if sc.input_transcription.text.strip():
+                            self.heard_words = True  # Gemini recognized actual words, not just noise
                     if sc.output_transcription and sc.output_transcription.text:
                         said.append(sc.output_transcription.text)
                     if sc.interrupted:
