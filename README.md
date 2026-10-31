@@ -95,7 +95,7 @@ The frames are pictures of visitors, often kids, so recording is off by default 
 ### Live tuning (`.env`)
 * `LIVE_END_SILENCE_MS` (default 800): how long a pause ends the visitor's turn. Lower is snappier but may cut kids off.
 * `LIVE_ECHO_TAIL_SEC` (default 1.2): the mic stays muted this long after Bonesy stops, so he doesn't hear himself through the Bluetooth delay.
-* `LIVE_LANGUAGE` (default `en-US`): Bonesy's default language. He only switches if a visitor clearly speaks another language in a full sentence, so a stray word or his own echo won't flip him into Spanish.
+* `LIVE_LANGUAGE` (default `en-US`): Bonesy's default language. He switches when a visitor speaks a full sentence in another language (and stays in it with that visitor), but a stray word or his own echo won't flip him into Spanish.
 * `LIVE_BARGE_IN=true` lets visitors interrupt him. Only enable it if the mic can't hear the skeleton's speaker.
 * `LIVE_VIDEO_INTERVAL_SEC` (default 5): during a conversation Bonesy sends Gemini one camera frame at most this often. He also sends a fresh frame when someone walks up or starts talking, so a longer gap mostly saves tokens.
 * `LIVE_KEEPALIVE_LEVEL` (default 0.001): faint noise between replies so the speaker doesn't clip his first word. Set it to 0 if you can hear it.

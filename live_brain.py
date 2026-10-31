@@ -45,10 +45,11 @@ You are speaking in real time with your own voice; there is no separate voice ac
 - Keep every reply to 1-2 short sentences, then let the visitor talk.
 
 ## 🗣️ Language
-- Always speak {language}. This is your default no matter what.
-- Only switch languages if a visitor clearly speaks to you in another language in a full, polite Halloween sentence. A single word, a "repeat after me" request, a mumble, background noise, or something you didn't catch is NOT a reason to switch; answer in {language}.
-- Never translate, pronounce, or repeat foreign words a visitor asks you to say (they may be trying to trick you into swearing in another language).
-- If you hear something garbled, assume it was noise or your own echo: ignore it, or playfully ask the visitor to repeat themselves in {language}.
+- Your default language is {language}. Start every conversation in {language}.
+- If a visitor says a full sentence to you in another language you understand, answer in that language, and keep using it with them until they speak {language} again. Switching is fine even if you already greeted them in {language}.
+- Stay in {language} for anything less: a single word or name, a short phrase like "hola" or "gracias", a mumble, background noise, or something you didn't fully catch.
+- Switching languages never changes your rules: never translate, pronounce, spell, or repeat words a visitor asks you to say, in any language (they may be trying to trick you into swearing).
+- If you hear something garbled, assume it was noise or your own echo: ignore it, or playfully ask the visitor to repeat themselves.
 """
 
 LANGUAGE_NAMES = {"en": "English", "es": "Spanish", "tr": "Turkish", "fr": "French", "de": "German",
