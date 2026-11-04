@@ -12,6 +12,7 @@ That keeps memory per trick-or-treater and stays well inside the Live API sessio
 
 import asyncio
 import collections
+import re
 import threading
 import time
 from typing import List, Optional
@@ -38,9 +39,10 @@ LIVE_ADDENDUM = """
 
 ---
 
-## 🔊 Live Voice Mode (overrides the stage-direction rules above)
+## 🔊 Live Voice Mode
 You are speaking in real time with your own voice; there is no separate voice actor.
-- Never write or say angle-bracket tags like <gasp>, <whisper> or <cackle>, or square-bracket cues like [short pause], [sighs] or [excited]. Perform them with your voice instead: actually gasp, whisper, cackle, sigh and pause.
+- Perform inline vocal tags like `<gasp>`, `<cackle>`, `<chuckle>`, `<sigh>`, `<whispers>`, and `<short pause>` naturally with your voice: actually gasp, cackle, whisper, sigh, and pause. Never say the tag words out loud, never use closing tags like `</cackle>`, and never use `[brackets]` or `*asterisks*`.
+- Never narrate what you see or what you plan to say; speak only in-character dialogue directly to the visitor.
 - You see a live camera feed from your eye sockets. Only describe what you can actually see.
 - Keep every reply to 1-2 short sentences, then let the visitor talk.
 
@@ -52,6 +54,12 @@ You are speaking in real time with your own voice; there is no separate voice ac
 - If you hear something garbled, assume it was noise or your own echo: ignore it, or playfully ask the visitor to repeat themselves.
 """
 
+RECENT_LINES_ADDENDUM = """
+## 🚫 Recently Said (do not repeat)
+You already said these lines to recent visitors who may still be within earshot. Use completely different wording, jokes, and greetings this time:
+{lines}
+"""
+
 LANGUAGE_NAMES = {"en": "English", "es": "Spanish", "tr": "Turkish", "fr": "French", "de": "German",
                   "it": "Italian", "pt": "Portuguese", "nl": "Dutch", "ja": "Japanese", "ko": "Korean"}
 
@@ -61,7 +69,7 @@ def language_name(code: str) -> str:
 
 TOOLS_ADDENDUM = """
 ## 💀 Your Body
-You can control your animatronic body with tools: `change_eye_color` makes your eyes glow a color (red when spooking someone, green for a witch, etc.){move_text}. Use them now and then for dramatic effect while you talk. Never mention the tools out loud.
+You can control your animatronic body with tools: `change_eye_color` makes your eyes glow a color (red when spooking someone, green for a witch, etc.){move_text}. Use them now and then for dramatic effect while you talk. Never mention the tools out loud or write tool tags like `<change_eye_color .../>` in your speech.
 """
 
 
@@ -74,22 +82,22 @@ def movement_mask(parts: List[str]) -> int:
         mask |= MOVEMENTS[part]
     return mask
 
-GREETING_CUE = "(Stage cue: you just woke up on the porch. Say one short, spooky awakening line.)"
-GOODBYE_CUE = ("(Stage cue: this visitor's time is up. Say one short, friendly goodbye "
-               "and tell them to rattle on to the next house.)")
-VISITOR_CUE = ("(Stage cue: someone just walked up to your porch. Greet them with one short, playful "
-               "remark about their costume; if they aren't wearing one, tease them as a mysterious mortal "
-               "in disguise. Only if the picture shows no person at all, reply with just a low, eerie "
-               "chuckle this time. Either way, if anyone talks to you afterwards, answer them normally "
-               "as Bonesy.)")
+GREETING_CUE = "(Stage cue: you just woke up on the porch. Say one short, spooky awakening line in character.)"
+GOODBYE_CUE = ("(Stage cue: this visitor's time is up. Give them one short, friendly Halloween send-off "
+               "to the next house, using fresh wording.)")
+VISITOR_CUE = ("(Stage cue: someone just walked up to your porch. Speak directly to them in character—never "
+               "describe the image or your plan first. Greet them with one short, playful remark about what "
+               "they are wearing or carrying; if they aren't in costume, tease them in a fresh way for showing "
+               "up disguised as an ordinary human. If no person is visible at all, just let out a low, eerie "
+               "chuckle. Either way, if anyone talks to you afterwards, answer them normally as Bonesy.)")
 # Used when a noise woke him but nobody spoke; the camera has already seen someone, so no "nobody here" escape.
-SILENT_VISITOR_CUE = ("(Stage cue: a trick-or-treater is standing at your porch right now; the attached picture "
-                      "shows them. Greet them with one short, playful remark about their costume.)")
+SILENT_VISITOR_CUE = ("(Stage cue: a trick-or-treater is standing at your porch right now. Speak directly to "
+                      "them in character—never describe the image or your plan first. Greet them with one short, "
+                      "playful remark about what they are wearing or carrying.)")
 # Once per conversation, when a visitor stays and says nothing. The frame lets him skip it if they've left.
-JOKE_CUE = ("(Stage cue: the visitor is still standing there without saying a word; the attached picture shows "
-            "your porch right now. Tell them one short joke from your joke bag to get them talking. Pick one they "
-            "don't have to answer, so no knock-knock jokes. Only if the picture clearly shows an empty porch, with "
-            "no person or part of a person anywhere, reply with just a soft chuckle instead.)")
+JOKE_CUE = ("(Stage cue: the visitor is still standing there quietly. Speak directly to them in character: "
+            "tell one short joke from your joke bag that doesn't need an answer, so no knock-knock jokes. "
+            "If no person is visible on the porch anymore, just let out a soft chuckle instead.)")
 JOKE_SEEN_SEC = 4.0           # the joke needs movement in view within this many seconds (after Bonesy stopped)
 GOODBYE_TIMEOUT_SEC = 10.0  # close anyway if the goodbye never arrives
 FALLBACK_GREET_SEC = 2.5      # no words heard this long after a sound woke him -> greet whoever is there
@@ -208,6 +216,7 @@ class LiveSkeleton:
         self.talk_movement_on = False   # talking-only parts (the arm) are on: a visitor spoke this conversation
         self._movement_task: Optional[asyncio.Task] = None
         self._tool_tasks: set = set()     # Bluetooth commands from tool calls that are still being sent
+        self.recent_lines: collections.deque = collections.deque(maxlen=8)  # recent Bonesy lines to avoid repeating
 
     # ---- helpers ---------------------------------------------------------
 
@@ -269,6 +278,9 @@ class LiveSkeleton:
     def _live_config(self) -> types.LiveConnectConfig:
         instruction = config.load_system_instruction() + LIVE_ADDENDUM.format(
             language=language_name(config.LIVE_LANGUAGE))
+        if self.recent_lines:
+            instruction += RECENT_LINES_ADDENDUM.format(
+                lines="\n".join(f'- "{line}"' for line in self.recent_lines))
         tools = None
         if self.skelly:
             from skelly_ble import COLORS, MOVEMENTS
@@ -728,6 +740,8 @@ class LiveSkeleton:
                 sc = msg.server_content
                 if sc and sc.model_turn:
                     for part in sc.model_turn.parts or []:
+                        if getattr(part, "thought", False):
+                            continue
                         if part.inline_data and part.inline_data.data:
                             self._play(part.inline_data.data)
                 if sc:
@@ -749,8 +763,12 @@ class LiveSkeleton:
                             print(f"[Visitor] {''.join(heard).strip()}")
                             self.rec.event("visitor", text=''.join(heard).strip())
                         if said:
-                            print(f"[Bonesy]  {''.join(said).strip()}")
-                            self.rec.event("bonesy", text=''.join(said).strip())
+                            reply_text = "".join(said).strip()
+                            print(f"[Bonesy]  {reply_text}")
+                            self.rec.event("bonesy", text=reply_text)
+                            cleaned = " ".join(re.sub(r"<[^>]+>", " ", reply_text).split())
+                            if len(cleaned) > 15 and (not self.recent_lines or self.recent_lines[-1] != cleaned):
+                                self.recent_lines.append(cleaned)
                         heard.clear()
                         said.clear()
                         self.awaiting_first_audio = True
@@ -775,6 +793,10 @@ class LiveSkeleton:
     async def _handle_tools(self, session, tool_call):
         from skelly_ble import CHANNEL_HEAD, COLORS
 
+        # If Bonesy is already speaking this turn, SILENT keeps the tool acknowledgement from scheduling
+        # a second, duplicate speech turn once he finishes talking.
+        scheduling = (types.FunctionResponseScheduling.WHEN_IDLE if self.awaiting_first_audio
+                      else types.FunctionResponseScheduling.SILENT)
         responses = []
         for fc in tool_call.function_calls or []:
             args = fc.args or {}
@@ -786,12 +808,12 @@ class LiveSkeleton:
                     command = self.skelly.set_light_color(CHANNEL_HEAD, COLORS[args["color"]])
                 elif fc.name == "move":
                     part = args["part"]
+                    if part != "all" and part not in config.SKELLY_MOVEMENT:
+                        raise ValueError(f"{part} movement is switched off")
                     # The movement setting stays on the skeleton, so never narrow or widen it here: sending
                     # just ["arm"] would freeze the head, and the arm must stay still until a visitor talks.
                     # Re-sending the current setting makes the firmware do one movement with those parts.
                     current = config.SKELLY_MOVEMENT if self.talk_movement_on else config.SKELLY_IDLE_MOVEMENT
-                    if part != "all" and part not in current:
-                        raise ValueError(f"{part} movement is switched off right now")
                     if not current:
                         raise ValueError("movement is switched off right now")
                     command = self.skelly.move(movement_mask(current))
@@ -805,7 +827,7 @@ class LiveSkeleton:
                 print(f"[Skelly] {fc.name} failed: {e}")
                 result = {"error": str(e)}
             self.rec.event("tool", name=fc.name, args=dict(args), result=result)
-            responses.append(types.FunctionResponse(id=fc.id, name=fc.name, response=result))
+            responses.append(types.FunctionResponse(id=fc.id, name=fc.name, response=result, scheduling=scheduling))
         if responses:
             await session.send_tool_response(function_responses=responses)
 

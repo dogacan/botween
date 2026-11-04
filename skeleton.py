@@ -23,10 +23,10 @@ BLOCKED_FINISH_REASONS = {
 # Said when the safety filter blocks a reply. It may be a false alarm on an innocent kid,
 # so it redirects without accusing anyone.
 BLOCKED_REPLY = "<gasp> Rattle my ribs, I lost my train of thought! Grab a treat and have a frightfully fun night!"
-EMPTY_REPLY = "<cackle> Boo! </cackle> Happy Halloween!"
+EMPTY_REPLY = "<cackle> Boo! Happy Halloween!"
 GOODBYE_HINT = (
     " This is your last reply to this visitor: wrap up with a short, friendly goodbye "
-    "and tell them to rattle on to the next house."
+    "and send them on to the next house with a fresh Halloween send-off."
 )
 
 
