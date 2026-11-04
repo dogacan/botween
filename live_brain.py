@@ -108,9 +108,11 @@ JOKE_SEEN_SEC = 4.0           # the joke needs movement in view within this many
 GOODBYE_TIMEOUT_SEC = 10.0  # close anyway if the goodbye never arrives
 FALLBACK_GREET_SEC = 2.5      # no words heard this long after a sound woke him -> greet whoever is there
 FALLBACK_AFTER_SOUND_SEC = 2.5  # ...and the last sound was this long ago (Gemini reports words ~2 s after speech)
-FALLBACK_GIVE_UP_SEC = 15.0   # sound never stopped: someone is probably talking, so don't step on them
+FALLBACK_GIVE_UP_SEC = 15.0   # stop waiting for sound to end: after this long, greet whoever is in view anyway
 FALLBACK_SEEN_SEC = 5.0       # "someone is here" = the camera saw movement within this many seconds
 SEND_TIMEOUT_SEC = 5.0        # bound websocket sends so a stalled connection can't hang the session loop
+OUTPUT_STALL_SEC = 2.0        # speaker callback silent this long while voice is queued -> output is stuck
+WATCHDOG_EXTRA_SEC = 30.0     # end a session this long past its idle timeout / hard cap, whatever else is going on
 GOODBYE_RE = re.compile(
     r"\b(bye|bye-bye|goodbye|good night|goodnight|see ya|see you|farewell|have a good night)\b",
     re.IGNORECASE,
@@ -124,6 +126,7 @@ class VoicePlayer:
         self._buf = bytearray()
         self._lock = threading.Lock()
         self._last_voice = 0.0
+        self._last_callback = time.monotonic()  # when the output stream last asked for audio
         self._voice_end = 0  # bytes from the buffer start to the end of the last voice chunk (not the echo tail)
         level = int(config.LIVE_KEEPALIVE_LEVEL * 32767)
         rng = np.random.default_rng(0)
@@ -148,6 +151,7 @@ class VoicePlayer:
     def _callback(self, outdata, frames, _time_info, _status):
         nbytes = frames * 2
         with self._lock:
+            self._last_callback = time.monotonic()
             chunk = bytes(self._buf[:nbytes])
             del self._buf[:nbytes]
             playing_voice = self._voice_end > 0
@@ -194,7 +198,14 @@ class VoicePlayer:
         """
         with self._lock:
             if self._voice_end:
-                return True
+                if time.monotonic() - self._last_callback < OUTPUT_STALL_SEC:
+                    return True
+                # The output stream stopped pulling audio (e.g. the Bluetooth speaker dropped), so this
+                # voice will never finish playing. Drop it rather than staying "speaking" forever,
+                # which would mute the mic and freeze the conversation loop.
+                print("[Live] Speaker output stalled. Dropping queued audio.")
+                self._buf.clear()
+                self._voice_end = 0
         return (time.monotonic() - self._last_voice) < config.LIVE_ECHO_TAIL_SEC
 
 
@@ -628,6 +639,13 @@ class LiveSkeleton:
                     while not self.stop_event.is_set() and not receiver.done():
                         await asyncio.sleep(0.25)
                         now = time.monotonic()
+                        # Watchdog: runs before everything else, so nothing below can keep a stuck session open.
+                        hard_limit = (config.LIVE_MAX_SESSION_SEC + 15.0 + GOODBYE_TIMEOUT_SEC + WATCHDOG_EXTRA_SEC
+                                      if config.LIVE_MAX_SESSION_SEC > 0 else None)
+                        if (now - self.last_activity > config.LIVE_IDLE_TIMEOUT_SEC + WATCHDOG_EXTRA_SEC
+                                or (hard_limit and now - session_start > hard_limit)):
+                            self.note("[Live] Watchdog: session looks stuck. Closing it.")
+                            break
                         if self.player.is_speaking:
                             spoke_until = now
                             continue
