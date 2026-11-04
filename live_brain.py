@@ -83,8 +83,9 @@ def movement_mask(parts: List[str]) -> int:
     return mask
 
 GREETING_CUE = "(Stage cue: you just woke up on the porch. Say one short, spooky awakening line in character.)"
-GOODBYE_CUE = ("(Stage cue: this visitor's time is up. Give them one short, friendly Halloween send-off "
-               "to the next house, using fresh wording.)")
+GOODBYE_CUE = ("(Stage cue: this visitor's time is up. If you just asked a riddle or joke setup, quickly give "
+               "the punchline first, then give them one short, friendly Halloween send-off to the next house, "
+               "using fresh wording.)")
 VISITOR_CUE = ("(Stage cue: someone just walked up to your porch. Speak directly to them in character—never "
                "describe the image or your plan first. Greet them with one short, playful remark about what "
                "they are wearing or carrying; if they aren't in costume, tease them in a fresh way for showing "
@@ -104,6 +105,11 @@ FALLBACK_GREET_SEC = 2.5      # no words heard this long after a sound woke him 
 FALLBACK_AFTER_SOUND_SEC = 2.5  # ...and the last sound was this long ago (Gemini reports words ~2 s after speech)
 FALLBACK_GIVE_UP_SEC = 15.0   # sound never stopped: someone is probably talking, so don't step on them
 FALLBACK_SEEN_SEC = 5.0       # "someone is here" = the camera saw movement within this many seconds
+SEND_TIMEOUT_SEC = 5.0        # bound websocket sends so a stalled connection can't hang the session loop
+GOODBYE_RE = re.compile(
+    r"\b(bye|bye-bye|goodbye|good night|goodnight|see ya|see you|farewell|have a good night)\b",
+    re.IGNORECASE,
+)
 
 
 class VoicePlayer:
@@ -206,6 +212,8 @@ class LiveSkeleton:
         self.trigger = None  # asyncio.Event, created inside the loop
         self.last_activity = 0.0
         self.last_voice_time = 0.0
+        self.last_cue_time = 0.0
+        self.visitor_said_goodbye = False
         self.awaiting_first_audio = False
         self.turn_done = False
         self.turn_count = 0
@@ -518,14 +526,15 @@ class LiveSkeleton:
                 self._visitor_spoke()
 
             if self.session is not None:
-                if voice:
-                    self.last_activity = time.monotonic()
                 # Half-duplex: send silence while Bonesy talks so he doesn't hear (and interrupt) himself.
                 # Also silent during a cap goodbye, so the visitor can't steer the last line.
                 data = pcm if ((config.LIVE_BARGE_IN or not speaking) and not self.closing) else silence
                 try:
-                    await self.session.send_realtime_input(
-                        audio=types.Blob(data=data, mime_type=f"audio/pcm;rate={IN_RATE}"))
+                    await asyncio.wait_for(
+                        self.session.send_realtime_input(
+                            audio=types.Blob(data=data, mime_type=f"audio/pcm;rate={IN_RATE}")),
+                        SEND_TIMEOUT_SEC,
+                    )
                 except Exception:
                     pass
             elif self.connecting:
@@ -555,6 +564,10 @@ class LiveSkeleton:
         self.turn_done = False
         self.turn_count = 0
         self.closing = False
+        self.visitor_said_goodbye = False
+        self.last_cue_time = 0.0
+        if cue is not None:
+            self.last_voice_time = 0.0  # don't carry over a previous visitor's voice timestamp into a cue
         goodbye_deadline = 0.0
         self.status("Connecting...")
         t0 = time.monotonic()
@@ -568,8 +581,11 @@ class LiveSkeleton:
                 if cue is None:
                     await self._send_frame(session)  # a visitor is talking: let Gemini see them
                 while self.pending:
-                    await session.send_realtime_input(
-                        audio=types.Blob(data=self.pending.pop(0), mime_type=f"audio/pcm;rate={IN_RATE}"))
+                    await asyncio.wait_for(
+                        session.send_realtime_input(
+                            audio=types.Blob(data=self.pending.pop(0), mime_type=f"audio/pcm;rate={IN_RATE}")),
+                        SEND_TIMEOUT_SEC,
+                    )
                 cue_sent = True
                 if motion_visit and self.last_voice_time >= t0 - 1.0:
                     # They spoke while we were connecting; their words start the turn, no cue needed.
@@ -579,7 +595,9 @@ class LiveSkeleton:
                 elif motion_visit:
                     await self._send_cue_with_frame(session, cue)  # the frame travels with the cue
                 elif cue:
-                    await session.send_realtime_input(text=cue)  # startup greeting: no frame needed
+                    self.last_cue_time = time.monotonic()
+                    self.last_voice_time = 0.0
+                    await asyncio.wait_for(session.send_realtime_input(text=cue), SEND_TIMEOUT_SEC)
                     self.rec.event("cue", text=cue)
                 else:
                     cue_sent = False
@@ -614,10 +632,10 @@ class LiveSkeleton:
                             self.note("[Live] Visitor moved on. Closing session for the next trick-or-treater! 🎃")
                             break
                         if fallback_at and now >= fallback_at:
-                            if (self.heard_words or not self.awaiting_first_audio or self.turn_count
-                                    or now > session_start + FALLBACK_GIVE_UP_SEC):
-                                fallback_at = None  # they did talk, he's already answering, or it's too late
-                            elif now - self.last_voice_time < FALLBACK_AFTER_SOUND_SEC:
+                            if self.heard_words or not self.awaiting_first_audio or self.turn_count:
+                                fallback_at = None  # they did talk, or he's already answering
+                            elif (now - self.last_voice_time < FALLBACK_AFTER_SOUND_SEC
+                                  and now <= session_start + FALLBACK_GIVE_UP_SEC):
                                 pass  # recent sound: they may be talking, give Gemini time to report words
                             elif self.motion.snapshot().quiet_for > FALLBACK_SEEN_SEC:
                                 self.note("[Live] Only heard noise, and nobody is in view. Staying quiet.")
@@ -626,11 +644,12 @@ class LiveSkeleton:
                                 self.note("[Live] No words heard, but someone is here. Greeting them.")
                                 fallback_at = None
                                 fallback_greeted = True
+                                self.last_activity = now
                                 await self._send_cue_with_frame(session, SILENT_VISITOR_CUE)
                         # Someone is still standing there in silence after his line: try one joke.
                         if (config.MOTION_JOKE_AFTER_SEC > 0 and self.motion and not greeting and not joke_told
-                                and fallback_at is None and not self.closing and self.turn_count
-                                and self.turn_done and self.awaiting_first_audio
+                                and not self.visitor_said_goodbye and fallback_at is None and not self.closing
+                                and self.turn_count and self.turn_done and self.awaiting_first_audio
                                 and now - max(spoke_until, self.last_voice_time) >= config.MOTION_JOKE_AFTER_SEC):
                             moved_ago = self.motion.snapshot().quiet_for
                             # Only movement since he stopped counts; his own head moves while he talks.
@@ -655,17 +674,25 @@ class LiveSkeleton:
                                 self.cooldown_until = time.monotonic() + config.LIVE_CAP_COOLDOWN_SEC
                                 break
                             continue
+                        # Wait until any in-progress reply finishes (or +15s hard safety ceiling) before cutting off.
+                        in_turn = not self.awaiting_first_audio
+                        hard_cap = (config.LIVE_MAX_SESSION_SEC > 0
+                                    and (now - session_start) >= config.LIVE_MAX_SESSION_SEC + 15.0)
                         cap = None
-                        if config.LIVE_MAX_TURNS > 0 and self.turn_count >= config.LIVE_MAX_TURNS:
-                            cap = f"Max turns ({config.LIVE_MAX_TURNS})"
-                        elif config.LIVE_MAX_SESSION_SEC > 0 and (now - session_start) >= config.LIVE_MAX_SESSION_SEC:
-                            cap = f"Max session duration ({config.LIVE_MAX_SESSION_SEC:.0f}s)"
+                        if not in_turn or hard_cap:
+                            if config.LIVE_MAX_TURNS > 0 and self.turn_count >= config.LIVE_MAX_TURNS:
+                                cap = f"Max turns ({config.LIVE_MAX_TURNS})"
+                            elif config.LIVE_MAX_SESSION_SEC > 0 and (now - session_start) >= config.LIVE_MAX_SESSION_SEC:
+                                cap = f"Max session duration ({config.LIVE_MAX_SESSION_SEC:.0f}s)"
                         if cap:
                             self.note(f"[Live] {cap} reached. Saying goodbye, then resetting memory! 🎃")
                             self.closing = True
                             self.turn_done = False
+                            self.last_activity = now
+                            self.last_cue_time = now
+                            self.last_voice_time = 0.0
                             goodbye_deadline = now + GOODBYE_TIMEOUT_SEC
-                            await session.send_realtime_input(text=GOODBYE_CUE)
+                            await asyncio.wait_for(session.send_realtime_input(text=GOODBYE_CUE), SEND_TIMEOUT_SEC)
                             self.rec.event("cue", text=GOODBYE_CUE)
                 finally:
                     self.session = None
@@ -701,7 +728,12 @@ class LiveSkeleton:
             if self.preview:
                 self.preview.update_sent(jpeg)
         parts.append(types.Part(text=cue))
-        await session.send_client_content(turns=types.Content(role="user", parts=parts), turn_complete=True)
+        self.last_cue_time = time.monotonic()
+        self.last_voice_time = 0.0
+        await asyncio.wait_for(
+            session.send_client_content(turns=types.Content(role="user", parts=parts), turn_complete=True),
+            SEND_TIMEOUT_SEC,
+        )
         self.rec.event("cue", text=cue, frame=frame_name if jpeg else None)
 
     async def _send_frame(self, session):
@@ -710,7 +742,10 @@ class LiveSkeleton:
             return
         jpeg = self.cam.get_latest_jpeg_bytes(max_dimension=config.LIVE_VIDEO_MAX_DIM)
         if jpeg:
-            await session.send_realtime_input(video=types.Blob(data=jpeg, mime_type="image/jpeg"))
+            await asyncio.wait_for(
+                session.send_realtime_input(video=types.Blob(data=jpeg, mime_type="image/jpeg")),
+                SEND_TIMEOUT_SEC,
+            )
             self.last_frame_time = time.monotonic()
             self.rec.frame(jpeg, "video")
             if self.preview:
@@ -757,6 +792,7 @@ class LiveSkeleton:
                         heard.append(sc.input_transcription.text)
                         if sc.input_transcription.text.strip():
                             self.heard_words = True  # Gemini recognized actual words, not just noise
+                            self.last_activity = time.monotonic()
                     if sc.output_transcription and sc.output_transcription.text:
                         said.append(sc.output_transcription.text)
                     if sc.interrupted:
@@ -768,8 +804,11 @@ class LiveSkeleton:
                         if self.fx:
                             self.player.enqueue(self.fx.flush(), voice=False)  # let the echo ring out
                         if heard:
-                            print(f"[Visitor] {''.join(heard).strip()}")
-                            self.rec.event("visitor", text=''.join(heard).strip())
+                            visitor_text = "".join(heard).strip()
+                            print(f"[Visitor] {visitor_text}")
+                            self.rec.event("visitor", text=visitor_text)
+                            if visitor_text:
+                                self.visitor_said_goodbye = bool(GOODBYE_RE.search(visitor_text))
                         if said:
                             reply_text = "".join(said).strip()
                             print(f"[Bonesy]  {reply_text}")
@@ -791,10 +830,17 @@ class LiveSkeleton:
                 return
 
     def _play(self, pcm: bytes):
-        if self.awaiting_first_audio and self.last_voice_time:
-            self.note(f"[Live] Reply started {time.monotonic() - self.last_voice_time:.2f}s after the visitor stopped talking.")
+        now = time.monotonic()
+        if self.awaiting_first_audio:
+            if self.last_voice_time:
+                self.note(f"[Live] Reply started {now - self.last_voice_time:.2f}s after the visitor stopped talking.")
+            elif self.last_cue_time:
+                self.note(f"[Live] Reply started {now - self.last_cue_time:.2f}s after cue.")
+            self.last_voice_time = 0.0
+            self.last_cue_time = 0.0
+            self.turn_done = False
         self.awaiting_first_audio = False
-        self.last_activity = time.monotonic()
+        self.last_activity = now
         self.status("Speaking...")
         self.player.enqueue(self.fx.process(pcm) if self.fx else pcm)
 
@@ -837,7 +883,7 @@ class LiveSkeleton:
             self.rec.event("tool", name=fc.name, args=dict(args), result=result)
             responses.append(types.FunctionResponse(id=fc.id, name=fc.name, response=result, scheduling=scheduling))
         if responses:
-            await session.send_tool_response(function_responses=responses)
+            await asyncio.wait_for(session.send_tool_response(function_responses=responses), SEND_TIMEOUT_SEC)
 
     async def _run_tool(self, name: str, args: dict, command):
         try:
