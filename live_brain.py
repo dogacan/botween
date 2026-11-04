@@ -156,12 +156,19 @@ class VoicePlayer:
         self.stream.close()
 
     def enqueue(self, pcm: bytes, voice: bool = True):
-        """voice=False for the echo tail after a reply: it plays, but doesn't keep the mic muted."""
+        """voice=False for the echo tail after a reply: only its loud early repeats extend the mic mute."""
         pcm = apply_gain(pcm, config.LIVE_OUTPUT_GAIN)
+        loud_bytes = len(pcm)
+        if not voice and pcm:
+            # At high LIVE_OUTPUT_GAIN the first echo repeats can be loud enough for the mic to hear;
+            # keep them inside _voice_end, and let the faint decay ring out during LIVE_ECHO_TAIL_SEC.
+            loud = np.nonzero(np.abs(np.frombuffer(pcm, dtype="<i2")) > 1500)[0]
+            loud_bytes = int(loud[-1] + 1) * 2 if len(loud) else 0
         with self._lock:
+            start = len(self._buf)
             self._buf += pcm
-            if voice:
-                self._voice_end = len(self._buf)
+            if loud_bytes:
+                self._voice_end = start + loud_bytes
 
     def clear(self):
         with self._lock:
@@ -498,7 +505,8 @@ class LiveSkeleton:
         while True:
             block = await queue.get()
             rms = float(np.sqrt(np.mean(block ** 2)))
-            pcm = (np.clip(block[:, 0], -1.0, 1.0) * 32767).astype("<i2").tobytes()
+            raw_pcm = (np.clip(block[:, 0], -1.0, 1.0) * 32767).astype("<i2").tobytes()
+            pcm = apply_gain(raw_pcm, config.LIVE_INPUT_GAIN)
             speaking = self.player.is_speaking
             voice = rms > self.threshold and not speaking and time.monotonic() >= self.mic_ready_at
 

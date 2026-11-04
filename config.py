@@ -124,7 +124,7 @@ LIVE_IDLE_TIMEOUT_SEC = float(os.getenv("LIVE_IDLE_TIMEOUT_SEC", "25"))  # close
 LIVE_MAX_TURNS = int(os.getenv("LIVE_MAX_TURNS", "6"))                  # max turns per visitor before memory reset
 LIVE_MAX_SESSION_SEC = float(os.getenv("LIVE_MAX_SESSION_SEC", "90"))   # max total seconds per visitor session
 LIVE_CAP_COOLDOWN_SEC = float(os.getenv("LIVE_CAP_COOLDOWN_SEC", "5"))  # ignore the mic this long after a cap goodbye
-LIVE_END_SILENCE_MS = int(os.getenv("LIVE_END_SILENCE_MS", "800"))  # server VAD: silence that ends a turn
+LIVE_END_SILENCE_MS = int(os.getenv("LIVE_END_SILENCE_MS", "600"))  # server VAD: silence that ends a turn
 LIVE_ECHO_TAIL_SEC = float(os.getenv("LIVE_ECHO_TAIL_SEC", "1.2"))  # keep mic muted after speech (BT delay)
 # Live voice. Measured pitch: Alnilam ~92 Hz, Gacrux ~93, Umbriel ~93, Algenib ~99 (gravelly), Puck ~109.
 LIVE_VOICE_NAME = os.getenv("LIVE_VOICE_NAME", "Algenib").strip() or "Algenib"
@@ -133,8 +133,10 @@ LIVE_PITCH_SEMITONES = float(os.getenv("LIVE_PITCH_SEMITONES", "-3"))  # negativ
 LIVE_ECHO_DELAY_MS = float(os.getenv("LIVE_ECHO_DELAY_MS", "220"))      # time between echo repeats
 LIVE_ECHO_FEEDBACK = float(os.getenv("LIVE_ECHO_FEEDBACK", "0.35"))     # how much each repeat keeps (0-0.9)
 LIVE_ECHO_MIX = float(os.getenv("LIVE_ECHO_MIX", "0.2"))               # echo loudness; 0 = no echo
-# Voice loudness boost (1 = unchanged, 2 = about twice as loud). Peaks are softly limited instead of clipping.
+# Voice loudness boost (1 = unchanged, 2-2.5 = sweet spot outdoors). Peaks are softly limited instead of clipping.
 LIVE_OUTPUT_GAIN = float(os.getenv("LIVE_OUTPUT_GAIN", "1.0"))
+# Mic input boost sent to Gemini (1 = unchanged, 1.5-2 = helps pick up quiet voices at porch distance).
+LIVE_INPUT_GAIN = float(os.getenv("LIVE_INPUT_GAIN", "1.5"))
 # Default conversation language (BCP-47). Bonesy only switches if a visitor clearly speaks another language.
 LIVE_LANGUAGE = os.getenv("LIVE_LANGUAGE", "en-US").strip() or "en-US"
 LIVE_BARGE_IN = _env_bool("LIVE_BARGE_IN", "false")                 # let visitors interrupt (needs no echo!)
