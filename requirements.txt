@@ -3,7 +3,7 @@ sounddevice>=0.5.5
 opencv-python>=4.13.0
 pillow>=12.2.0
 python-dotenv>=1.2.3
-numpy>=2.0.0
+numpy>=2.5.4
 bleak>=1.0
 pyobjc-framework-IOBluetooth>=10; sys_platform == "darwin"
 pyobjc-framework-AVFoundation>=10; sys_platform == "darwin"
