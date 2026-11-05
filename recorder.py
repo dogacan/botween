@@ -83,7 +83,7 @@ class NoRecorder:
         pass
 
     def frame(self, jpeg: bytes, how: str) -> Optional[str]:
-        return None
+        return None if jpeg else ""
 
     def save_text(self, name: str, text: str):
         pass
