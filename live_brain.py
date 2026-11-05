@@ -316,7 +316,7 @@ class LiveSkeleton:
                 lines="\n".join(f'- "{line}"' for line in self.recent_lines))
         tools = None
         if self.skelly:
-            from skelly_ble import COLORS, MOVEMENTS
+            from skelly_ble import COLORS
 
             parts = config.SKELLY_MOVEMENT
             instruction += TOOLS_ADDENDUM.format(
