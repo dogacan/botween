@@ -41,7 +41,8 @@ LIVE_ADDENDUM = """
 
 ## 🔊 Live Voice Mode
 You are speaking in real time with your own voice; there is no separate voice actor.
-- Perform inline vocal tags like `<gasp>`, `<cackle>`, `<chuckle>`, `<sigh>`, `<whispers>`, and `<short pause>` naturally with your voice: actually gasp, cackle, whisper, sigh, and pause. Never say the tag words out loud, never use closing tags like `</cackle>`, and never use `[brackets]` or `*asterisks*`.
+- Use your full vocal range naturally: vary your pitch, pace, volume, pauses, laughs, whispers, gasps, and groans to fit the moment and the visitor's energy, without overusing any single sound or starting every line the same way.
+- Never write or speak stage-direction tags, angle brackets (`<...>`), square brackets (`[...]`), or asterisks (`*...*`)—just perform the expression directly with your voice.
 - Never narrate what you see or what you plan to say; speak only in-character dialogue directly to the visitor.
 - You see a live camera feed from your eye sockets. Only describe what you can actually see.
 - Keep every reply to 1-2 short sentences, then let the visitor talk.
@@ -94,8 +95,9 @@ GOODBYE_CUE = ("(Stage cue: this visitor's time is up. If you just asked a riddl
 VISITOR_CUE = ("(Stage cue: someone just walked up to your porch. Speak directly to them in character—never "
                "describe the image or your plan first. Greet them with one short, playful remark about what "
                "they are wearing or carrying; if they aren't in costume, tease them in a fresh way for showing "
-               "up disguised as an ordinary human. If no person is visible at all, just let out a low, eerie "
-               "chuckle. Either way, if anyone talks to you afterwards, answer them normally as Bonesy.)")
+               "up disguised as an ordinary human. If no person is visible at all, just mutter or sigh to "
+               "yourself about the spooky night. Either way, if anyone talks to you afterwards, answer them "
+               "normally as Bonesy.)")
 # Used when a noise woke him but nobody spoke; the camera has already seen someone, so no "nobody here" escape.
 SILENT_VISITOR_CUE = ("(Stage cue: a trick-or-treater is standing at your porch right now. Speak directly to "
                       "them in character—never describe the image or your plan first. Greet them with one short, "
@@ -103,7 +105,7 @@ SILENT_VISITOR_CUE = ("(Stage cue: a trick-or-treater is standing at your porch 
 # Once per conversation, when a visitor stays and says nothing. The frame lets him skip it if they've left.
 JOKE_CUE = ("(Stage cue: the visitor is still standing there quietly. Speak directly to them in character: "
             "tell one short joke from your joke bag that doesn't need an answer, so no knock-knock jokes. "
-            "If no person is visible on the porch anymore, just let out a soft chuckle instead.)")
+            "If no person is visible on the porch anymore, just sigh or mutter briefly to yourself instead.)")
 JOKE_SEEN_SEC = 4.0           # the joke needs movement in view within this many seconds (after Bonesy stopped)
 GOODBYE_TIMEOUT_SEC = 10.0  # close anyway if the goodbye never arrives
 FALLBACK_GREET_SEC = 2.5      # no words heard this long after a sound woke him -> greet whoever is there
@@ -346,6 +348,7 @@ class LiveSkeleton:
                 prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=config.LIVE_VOICE_NAME))),
             system_instruction=instruction,
             tools=tools,
+            enable_affective_dialog=config.LIVE_AFFECTIVE_DIALOG or None,
             # No safety_settings or thinking_config here: the Live API rejects safety_settings at setup
             # ("Unknown name safetySettings") and gemini-3.8-live already runs at minimal thinking.
             # Hint the visitor-side transcription toward the default language and Halloween phrases.

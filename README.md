@@ -95,13 +95,13 @@ The frames are pictures of visitors, often kids, so recording is off by default 
 * `LIVE_END_SILENCE_MS` (default 800): how long a pause ends the visitor's turn. Lower is snappier but may cut kids off.
 * `LIVE_ECHO_TAIL_SEC` (default 1.2): the mic stays muted this long after Bonesy stops, so he doesn't hear himself through the Bluetooth delay.
 * `LIVE_LANGUAGE` (default `en-US`): Bonesy's default language. He switches when a visitor speaks a full sentence in another language (and stays in it with that visitor), but a stray word or his own echo won't flip him into Spanish.
+* `LIVE_AFFECTIVE_DIALOG` (default `true`): Lets Gemini naturally adapt its vocal expression and tone to the visitor's delivery.
 * `LIVE_BARGE_IN=true` lets visitors interrupt him. Only enable it if the mic can't hear the skeleton's speaker.
 * `LIVE_VIDEO_INTERVAL_SEC` (default 5): during a conversation Bonesy sends Gemini one camera frame at most this often. He also sends a fresh frame when someone walks up or starts talking, so a longer gap mostly saves tokens.
 * `LIVE_KEEPALIVE_LEVEL` (default 0.001): faint noise between replies so the speaker doesn't clip his first word. Set it to 0 if you can hear it.
-* **Voice:** `LIVE_VOICE_NAME` (default `Algenib`, a gravelly voice that measured among the deepest of Gemini's 30 voices; `Alnilam`, `Gacrux` and `Umbriel` are similar).
+* **Voice**: `LIVE_VOICE_NAME` (default `Algenib`, a gravelly voice that measured among the deepest of Gemini's 30 voices; `Alnilam`, `Gacrux` and `Umbriel` are similar).
 * **Voice FX** (`ENABLE_SPOOKY_FX=true`): `voice_fx.py` lowers the pitch by `LIVE_PITCH_SEMITONES` (default -3), adds the crypt reverb, and adds a repeating echo (`LIVE_ECHO_DELAY_MS`, `LIVE_ECHO_FEEDBACK`, `LIVE_ECHO_MIX`). It runs on the live stream and adds about 30 ms of delay.
 * `LIVE_OUTPUT_GAIN` (default 1.0): makes the voice louder before it goes to the speaker (2.0 is about twice as loud). Loud peaks are softly limited so they don't crackle. For the skeleton's own speaker volume, set `SKELLY_VOLUME` (0-255).
-* Stage tags in `prompt.md` (`<cackle>` etc.) are acted out by the Live voice directly. They still show up in the printed transcript, but he doesn't say them.
 * Use a wired or USB mic, not a Bluetooth one. Bluetooth mics switch macOS into low-quality headset mode.
 
 ### Motion trigger (greets visitors as they walk up)
@@ -142,13 +142,9 @@ python3 skeleton.py --mode auto
 * `--list-devices`: Lists cameras and microphones, marks the selected ones, and exits.
 * `--rotate-180`: Rotates the camera picture 180° for an upside-down mount (same as `CAMERA_ROTATE_180=true`).
 
-## 🎭 Customizing the Skeleton Persona & Stage Directions
+## 🎭 Customizing the Skeleton Persona & Jokes
 
-The skeleton's personality, costume observation instructions, and stage directions are in **[`prompt.md`](prompt.md)**.
-* **Jokes**: Bonesy's jokes live in **[`jokes.json`](jokes.json)**, grouped by category (a plain list works too). Each visitor session picks `JOKES_PER_SESSION` (default 5) at random and drops them into the `{{JOKES}}` spot in `prompt.md`, so Bonesy doesn't tell everyone the same one. Jokes can carry inline vocal tags like `<short pause>`, `<sigh>`, or `<laugh>`; the prompt tells Bonesy to act these out rather than say them.
-* **Vocal Tags**: Bonesy uses inline theatrical tags that the Live voice acts out:
-  * `<gasp>`: A sharp, audible gasp upon seeing a visitor or costume.
-  * `<whispers>`: Leaning in close to whisper secrets or riddles.
-  * `<cackle>`, `<chuckle>`, `<laugh>`, or `<snicker>`: Wicked cackling and raspy skeleton giggles.
-  * `<short pause>` or `<long pause>`: Theatrical comedic timing before punchlines.
+The skeleton's personality, costume observation instructions, and voice-acting directions are in **[`prompt.md`](prompt.md)**.
+* **Jokes**: Bonesy's jokes live in **[`jokes.json`](jokes.json)**, grouped by category (a plain list works too). Each visitor session picks `JOKES_PER_SESSION` (default 5) at random and drops them into the `{{JOKES}}` spot in `prompt.md`, so Bonesy doesn't tell everyone the same one.
+* **Expressive Live Voice**: With `LIVE_AFFECTIVE_DIALOG=true` (default), Gemini Live adapts its vocal delivery, whispers, gasps, laughs, groans, and comedic pauses naturally to each visitor without needing inline `<tag>` markup.
 * **Live Reload**: `prompt.md` and `jokes.json` are re-read for every visitor session, so you can edit them while the script is running without restarting!

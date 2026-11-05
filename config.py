@@ -114,6 +114,8 @@ LIVE_OUTPUT_GAIN = float(os.getenv("LIVE_OUTPUT_GAIN", "1.0"))
 LIVE_INPUT_GAIN = float(os.getenv("LIVE_INPUT_GAIN", "1.5"))
 # Default conversation language (BCP-47). Bonesy only switches if a visitor clearly speaks another language.
 LIVE_LANGUAGE = os.getenv("LIVE_LANGUAGE", "en-US").strip() or "en-US"
+# Let Gemini adapt its vocal expression and tone to the visitor's voice and delivery.
+LIVE_AFFECTIVE_DIALOG = _env_bool("LIVE_AFFECTIVE_DIALOG", os.getenv("ENABLE_AFFECTIVE_DIALOG", "true"))
 LIVE_BARGE_IN = _env_bool("LIVE_BARGE_IN", "false")                 # let visitors interrupt (needs no echo!)
 # Save each conversation (transcripts, cues and every frame sent to Gemini) for replay.py.
 # Off by default: the frames are pictures of visitors, often kids.
