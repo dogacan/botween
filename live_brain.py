@@ -348,13 +348,11 @@ class LiveSkeleton:
                 prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=config.LIVE_VOICE_NAME))),
             system_instruction=instruction,
             tools=tools,
-            enable_affective_dialog=config.LIVE_AFFECTIVE_DIALOG or None,
-            # No safety_settings or thinking_config here: the Live API rejects safety_settings at setup
-            # ("Unknown name safetySettings") and gemini-3.8-live already runs at minimal thinking.
-            # Hint the visitor-side transcription toward the default language and Halloween phrases.
-            input_audio_transcription=types.AudioTranscriptionConfig(
-                language_codes=[config.LIVE_LANGUAGE],
-                custom_vocabulary=["trick or treat", "Bonesy", "Happy Halloween"]),
+            # Keep LiveConnectConfig minimal: gemini-3.8-live rejects safety_settings, thinking_config,
+            # enable_affective_dialog (built-in on 3.8 Live), and non-empty AudioTranscriptionConfig
+            # fields (language_codes / custom_vocabulary are only for gemini-3.5-transcribe-live) with
+            # 1007 "Request contains an invalid argument".
+            input_audio_transcription=types.AudioTranscriptionConfig(),
             output_audio_transcription=types.AudioTranscriptionConfig(),
             context_window_compression=types.ContextWindowCompressionConfig(sliding_window=types.SlidingWindow()),
             realtime_input_config=types.RealtimeInputConfig(
@@ -750,7 +748,7 @@ class LiveSkeleton:
             self.last_frame_time = time.monotonic()
             frame_name = self.rec.frame(jpeg, "with cue")
             if config.MOTION_DEBUG:  # keep the greeting frame so you can see what Gemini saw
-                (config.AUDIO_TEMP_DIR / "last_greeting_frame.jpg").write_bytes(jpeg)
+                (config.BASE_DIR / "last_greeting_frame.jpg").write_bytes(jpeg)
             if self.preview:
                 self.preview.update_sent(jpeg)
         parts.append(types.Part(text=cue))

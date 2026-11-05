@@ -95,7 +95,6 @@ The frames are pictures of visitors, often kids, so recording is off by default 
 * `LIVE_END_SILENCE_MS` (default 800): how long a pause ends the visitor's turn. Lower is snappier but may cut kids off.
 * `LIVE_ECHO_TAIL_SEC` (default 1.2): the mic stays muted this long after Bonesy stops, so he doesn't hear himself through the Bluetooth delay.
 * `LIVE_LANGUAGE` (default `en-US`): Bonesy's default language. He switches when a visitor speaks a full sentence in another language (and stays in it with that visitor), but a stray word or his own echo won't flip him into Spanish.
-* `LIVE_AFFECTIVE_DIALOG` (default `true`): Lets Gemini naturally adapt its vocal expression and tone to the visitor's delivery.
 * `LIVE_BARGE_IN=true` lets visitors interrupt him. Only enable it if the mic can't hear the skeleton's speaker.
 * `LIVE_VIDEO_INTERVAL_SEC` (default 5): during a conversation Bonesy sends Gemini one camera frame at most this often. He also sends a fresh frame when someone walks up or starts talking, so a longer gap mostly saves tokens.
 * `LIVE_KEEPALIVE_LEVEL` (default 0.001): faint noise between replies so the speaker doesn't clip his first word. Set it to 0 if you can hear it.
@@ -146,5 +145,5 @@ python3 skeleton.py --mode auto
 
 The skeleton's personality, costume observation instructions, and voice-acting directions are in **[`prompt.md`](prompt.md)**.
 * **Jokes**: Bonesy's jokes live in **[`jokes.json`](jokes.json)**, grouped by category (a plain list works too). Each visitor session picks `JOKES_PER_SESSION` (default 5) at random and drops them into the `{{JOKES}}` spot in `prompt.md`, so Bonesy doesn't tell everyone the same one.
-* **Expressive Live Voice**: With `LIVE_AFFECTIVE_DIALOG=true` (default), Gemini Live adapts its vocal delivery, whispers, gasps, laughs, groans, and comedic pauses naturally to each visitor without needing inline `<tag>` markup.
+* **Expressive Live Voice**: Gemini Live adapts its vocal delivery, whispers, gasps, laughs, groans, and comedic pauses naturally to each visitor without needing inline `<tag>` markup.
 * **Live Reload**: `prompt.md` and `jokes.json` are re-read for every visitor session, so you can edit them while the script is running without restarting!
