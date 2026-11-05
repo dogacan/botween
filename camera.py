@@ -1,7 +1,7 @@
 import threading
 import time
 import cv2
-from typing import Optional, Tuple
+from typing import Optional
 import config
 from devices import DeviceSpec, resolve_camera
 

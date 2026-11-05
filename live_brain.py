@@ -742,6 +742,7 @@ class LiveSkeleton:
         sees nobody. With the frame in the same message he sees who walked up.
         """
         parts = []
+        frame_name = None
         jpeg = self.cam.get_latest_jpeg_bytes(max_dimension=config.LIVE_VIDEO_MAX_DIM) if self.cam else None
         if jpeg:
             parts.append(types.Part.from_bytes(data=jpeg, mime_type="image/jpeg"))
