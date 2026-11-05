@@ -3,26 +3,16 @@ import os
 import random
 from pathlib import Path
 from dotenv import load_dotenv
-from google.genai import types
 
 # Load .env file from project root if present
 load_dotenv()
 
 # Gemini Configuration
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-
-# TTS Engine Configuration ("gemini" or "edge")
-TTS_ENGINE = os.getenv("TTS_ENGINE", "gemini").lower()
-GEMINI_TTS_MODEL = os.getenv("GEMINI_TTS_MODEL", "gemini-3.8-flash-lite-tts")
-# Locked Prebuilt Voice (e.g. Puck, Charon, Fenrir, Orus, Kore, Zephyr)
-# "Puck" is mischievous & raspy (ideal for a witty skeleton); "Charon" is deep & ominous
-GEMINI_VOICE_NAME = os.getenv("GEMINI_VOICE_NAME", "Puck")
+GEMINI_LIVE_MODEL = os.getenv("GEMINI_LIVE_MODEL", "gemini-3.8-live")
 
 # Project Directories
 BASE_DIR = Path(__file__).parent.resolve()
-AUDIO_TEMP_DIR = BASE_DIR / "temp_audio"
-AUDIO_TEMP_DIR.mkdir(exist_ok=True)
 
 # Prompt Configuration
 PROMPT_FILE = BASE_DIR / os.getenv("PROMPT_FILE", "prompt.md")
@@ -79,8 +69,6 @@ def load_system_instruction() -> str:
     return "You are Bonesy, an enchanted, witty talking skeleton for Halloween."
 
 
-SYSTEM_INSTRUCTION = load_system_instruction()
-
 # Hardware & Devices
 # Camera and mic: a device name (word match, see devices.py) or an index. List them with:
 #   python3 devices.py
@@ -89,20 +77,12 @@ MIC_DEVICE = os.getenv("MIC_DEVICE", "USB Camera").strip()        # blank = syst
 # Turn the picture right side up when the camera is mounted upside down
 CAMERA_ROTATE_180 = os.getenv("CAMERA_ROTATE_180", "false").strip().lower() in ("true", "1", "yes")
 
-# Audio Recording & VAD
+# Audio Input & Local Voice Trigger
 SAMPLE_RATE = 16000  # 16kHz standard
 CHANNELS = 1         # Mono
 VAD_ENERGY_THRESHOLD = float(os.getenv("VAD_ENERGY_THRESHOLD", "0.03"))
-SILENCE_DURATION_SEC = float(os.getenv("SILENCE_DURATION_SEC", "1.2"))
-MAX_RECORDING_SEC = float(os.getenv("MAX_RECORDING_SEC", "15.0"))
-MIN_SPEECH_DURATION_SEC = 0.5  # Ignore sub-second coughs/clicks
 
-# Text to Speech (edge-tts)
-TTS_VOICE = os.getenv("TTS_VOICE", "en-US-ChristopherNeural")
-TTS_PITCH = os.getenv("TTS_PITCH", "-15Hz")
-TTS_RATE = os.getenv("TTS_RATE", "-5%")
-
-# Spooky Audio FX (ffmpeg)
+# Real-Time Spooky Voice FX (voice_fx.py)
 ENABLE_SPOOKY_FX = os.getenv("ENABLE_SPOOKY_FX", "true").lower() in ("true", "1", "yes")
 
 
@@ -110,12 +90,7 @@ def _env_bool(name: str, default: str) -> bool:
     return os.getenv(name, default).strip().lower() in ("true", "1", "yes")
 
 
-# Conversation engine: "live" streams audio/video through the Gemini Live API (low latency);
-# "classic" is the record -> generate_content -> TTS -> afplay pipeline.
-ENGINE = os.getenv("ENGINE", "live").strip().lower()
-
 # Gemini Live API
-GEMINI_LIVE_MODEL = os.getenv("GEMINI_LIVE_MODEL", "gemini-3.8-live")
 # Camera frames sent during a conversation: at most one every this many seconds (Live allows 1/s).
 # A fresh frame also goes out when a conversation opens, so a longer gap mostly saves tokens.
 LIVE_VIDEO_INTERVAL_SEC = max(1.0, float(os.getenv("LIVE_VIDEO_INTERVAL_SEC", "5")))
@@ -201,16 +176,3 @@ SKELLY_MOVEMENT = _env_parts("SKELLY_MOVEMENT", "head,arm")
 SKELLY_IDLE_MOVEMENT = [p for p in _env_parts("SKELLY_IDLE_MOVEMENT", "head") if p in SKELLY_MOVEMENT]
 # Output device for the voice (substring match). Falls back to the system default if not found.
 SKELLY_AUDIO_OUTPUT = os.getenv("SKELLY_AUDIO_OUTPUT", "Skelly").strip()
-
-# Content safety filters, shared by both engines. LOW_AND_ABOVE flags ordinary Halloween talk
-# (graves, blood, zombies), so MEDIUM_AND_ABOVE is the default.
-SAFETY_THRESHOLD = os.getenv("SAFETY_THRESHOLD", "BLOCK_MEDIUM_AND_ABOVE").strip().upper()
-SAFETY_SETTINGS = [
-    types.SafetySetting(category=category, threshold=types.HarmBlockThreshold[SAFETY_THRESHOLD])
-    for category in (
-        types.HarmCategory.HARM_CATEGORY_HARASSMENT,
-        types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-        types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-        types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-    )
-]

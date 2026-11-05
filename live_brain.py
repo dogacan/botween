@@ -74,7 +74,7 @@ def language_name(code: str) -> str:
 
 TOOLS_ADDENDUM = """
 ## 💀 Your Body
-You can control your animatronic body with tools: `change_eye_color` makes your eyes glow a color (red when spooking someone, green for a witch, etc.){move_text}. Use them now and then for dramatic effect while you talk. Never mention the tools out loud or write tool tags like `<change_eye_color .../>` in your speech.
+You can control your animatronic body with tools: `change_eye_color` makes your eyes glow a color (red when spooking someone, green for a witch, etc.){move_text}. Use them now and then for dramatic effect while you talk. Always begin speaking your reply FIRST before calling `change_eye_color` or `move` so a tool call never delays the start of your voice. Never mention the tools out loud or write tool tags like `<change_eye_color .../>` in your speech.
 """
 
 
@@ -346,8 +346,8 @@ class LiveSkeleton:
                 prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=config.LIVE_VOICE_NAME))),
             system_instruction=instruction,
             tools=tools,
-            # No safety_settings here: the Live API rejects them at setup ("Unknown name safetySettings")
-            # and the session never opens. Live keeps its default filters; the prompt guardrails still apply.
+            # No safety_settings or thinking_config here: the Live API rejects safety_settings at setup
+            # ("Unknown name safetySettings") and gemini-3.8-live already runs at minimal thinking.
             # Hint the visitor-side transcription toward the default language and Halloween phrases.
             input_audio_transcription=types.AudioTranscriptionConfig(
                 language_codes=[config.LIVE_LANGUAGE],

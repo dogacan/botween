@@ -2,7 +2,7 @@
 
 An AI-powered, interactive talking skeleton prop designed for Halloween trick-or-treaters. 
 
-Botween uses your webcam to inspect trick-or-treaters' costumes, listens to what they say via microphone with Voice Activity Detection (VAD), sends the image and audio directly into **Gemini** (`gemini-3.8-flash` by default), and speaks back in a spooky, kid-friendly voice using **Gemini expressive TTS** (or **Edge-TTS** as a fallback) with crypt reverb from **FFmpeg**.
+Botween uses your webcam to detect approaching trick-or-treaters and inspect their costumes, streams mic audio and camera frames into the **Gemini Live API** (`gemini-3.8-live` by default), and streams Bonesy's voice back in real time (~1s latency) with real-time pitch shift, crypt reverb, and echo to the **Ultra Skelly** Bluetooth speaker (moving its jaw in sync).
 
 ---
 
@@ -67,7 +67,6 @@ The skeleton has two Bluetooth radios:
 ```bash
 python3 skeleton.py              # live engine, hands-free
 python3 skeleton.py --preview    # plus the camera preview window
-python3 skeleton.py --engine classic   # the original record → generate → TTS pipeline
 ```
 On startup Bonesy connects to the skeleton over BLE, turns on live mode, and finds the `Skelly` audio output (falling back to the system default). He stays quiet until someone shows up; set `STARTUP_GREETING=true` if you want an awakening line at startup (handy for checking the speaker). When the mic hears a voice he opens a Live session, including the second of audio from just before the trigger. The session closes after `LIVE_IDLE_TIMEOUT_SEC` of quiet, so each visitor gets a fresh conversation.
 
@@ -117,7 +116,7 @@ Tune it with `--preview`: moving areas are boxed (green once they count as a vis
 * `MOTION_MAX_AREA` (default 0.5): bigger changes are treated as headlights, a porch light or camera shake, and ignored.
 * `MOTION_SUSTAIN_SEC` (default 0.5): how long motion must last.
 * `MOTION_ROI`: optional `x,y,width,height` area to watch, as fractions of the frame (for example `0.2,0.3,0.6,0.7` to skip the street at the top). Shown as a blue box in the preview.
-* `MOTION_ENABLED=false` or `--no-motion` turns it off. Manual mode and the classic engine don't use it.
+* `MOTION_ENABLED=false` or `--no-motion` turns it off. Manual mode doesn't use it.
 
 ---
 
@@ -146,22 +145,10 @@ python3 skeleton.py --mode auto
 ## 🎭 Customizing the Skeleton Persona & Stage Directions
 
 The skeleton's personality, costume observation instructions, and stage directions are in **[`prompt.md`](prompt.md)**.
-* **Jokes**: Bonesy's jokes live in **[`jokes.json`](jokes.json)**, grouped by category (a plain list works too). Each visitor session picks `JOKES_PER_SESSION` (default 5) at random and drops them into the `{{JOKES}}` spot in `prompt.md`, so Bonesy doesn't tell everyone the same one. Jokes can carry square-bracket delivery cues like `[short pause]`, `[sighs]` or `[excited]`; the prompt tells Bonesy to act these out rather than say them, and the edge-tts fallback strips them.
-* **Stage Direction Cues**: Bonesy uses inline theatrical tags that the voice engine acts out:
+* **Jokes**: Bonesy's jokes live in **[`jokes.json`](jokes.json)**, grouped by category (a plain list works too). Each visitor session picks `JOKES_PER_SESSION` (default 5) at random and drops them into the `{{JOKES}}` spot in `prompt.md`, so Bonesy doesn't tell everyone the same one. Jokes can carry inline vocal tags like `<short pause>`, `<sigh>`, or `<laugh>`; the prompt tells Bonesy to act these out rather than say them.
+* **Vocal Tags**: Bonesy uses inline theatrical tags that the Live voice acts out:
   * `<gasp>`: A sharp, audible gasp upon seeing a visitor or costume.
-  * `<whisper> ... </whisper>`: Leaning in close to whisper secrets or riddles.
-  * `<cackle>` or `<laugh>`: Wicked cackling and raspy skeleton giggles.
-  * `<pause>`: Theatrical comedic timing before punchlines.
-* **Live Reload**: Both engines re-read `prompt.md` and `jokes.json` for every visitor, so you can edit them while the script is running without restarting!
-
----
-
-## 🎛️ Customizing Models & Voice
-
-You can adjust all model and sound parameters in `.env`:
-* **Brain Model**: `GEMINI_MODEL=gemini-3.8-flash` (or `gemini-3.5-flash-lite` for ultra-fast token replies).
-* **TTS Engine**: `TTS_ENGINE=gemini` (default, uses native expressive acting) or `edge` (offline Microsoft neural voice).
-* **Gemini Voice Model**: `GEMINI_TTS_MODEL=gemini-3.8-flash-lite-tts` (fast & economical) or `gemini-3.8-flash-tts` (studio grade).
-* **Spooky FX**: `ENABLE_SPOOKY_FX=true` applies FFmpeg's `aecho` and low-frequency resonance filters on top of the voice.
-* **Edge-TTS Fallback**: `TTS_VOICE=en-US-ChristopherNeural`, `TTS_PITCH=-15Hz`, `TTS_RATE=-5%`.
-* **Sensitivity**: Adjust `VAD_ENERGY_THRESHOLD=0.03` if your environment is noisy (traffic, wind).
+  * `<whispers>`: Leaning in close to whisper secrets or riddles.
+  * `<cackle>`, `<chuckle>`, `<laugh>`, or `<snicker>`: Wicked cackling and raspy skeleton giggles.
+  * `<short pause>` or `<long pause>`: Theatrical comedic timing before punchlines.
+* **Live Reload**: `prompt.md` and `jokes.json` are re-read for every visitor session, so you can edit them while the script is running without restarting!
