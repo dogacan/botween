@@ -6,4 +6,4 @@ python-dotenv>=1.2.3
 numpy>=2.0.0
 bleak>=1.0
 pyobjc-framework-IOBluetooth>=10; sys_platform == "darwin"
-pyobjc-framework-AVFoundation>=10; sys_platform == "darwin"
+pyobjc-framework-AVFoundation>=13.0; sys_platform == "darwin"
