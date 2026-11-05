@@ -15,7 +15,7 @@ import collections
 import re
 import threading
 import time
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import numpy as np
 import sounddevice as sd
@@ -245,7 +245,7 @@ class LiveSkeleton:
         self.mic_ready_at = 0.0
         self.last_frame_time = 0.0      # when the last camera frame went to Gemini (per conversation)
         self.heard_words = False        # Gemini transcribed words from the visitor (per conversation)
-        self.rec = NoRecorder()         # records the current conversation when RECORD_SESSIONS is on
+        self.rec: Union[SessionRecorder, NoRecorder] = NoRecorder()  # records when RECORD_SESSIONS is on
         self.talk_movement_on = False   # talking-only parts (the arm) are on: a visitor spoke this conversation
         self._movement_task: Optional[asyncio.Task] = None
         self._tool_tasks: set = set()     # Bluetooth commands from tool calls that are still being sent

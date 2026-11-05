@@ -31,13 +31,7 @@ def test_speaker_output():
     pcm = (np.clip(wave, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
 
     if config.ENABLE_SPOOKY_FX:
-        fx = VoiceFX(
-            OUT_RATE,
-            semitones=config.LIVE_PITCH_SEMITONES,
-            echo_delay_ms=config.LIVE_ECHO_DELAY_MS,
-            echo_feedback=config.LIVE_ECHO_FEEDBACK,
-            echo_mix=config.LIVE_ECHO_MIX,
-        )
+        fx = VoiceFX(OUT_RATE)
         pcm = fx.process(pcm) + fx.flush()
     pcm = apply_gain(pcm, config.LIVE_OUTPUT_GAIN)
 
