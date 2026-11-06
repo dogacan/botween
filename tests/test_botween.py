@@ -37,6 +37,25 @@ class ConfigAndAssetsTest(unittest.TestCase):
         self.assertTrue(len(prompt) > 100)
         self.assertNotIn(config.JOKES_PLACEHOLDER, prompt)
 
+    def test_build_system_instruction_includes_markdown_addendums(self):
+        full = config.build_system_instruction(
+            recent_lines=["Boo! Nice cape!", "Spare ribs for dinner!"],
+            movement_parts=["head", "arm"],
+        )
+        self.assertIn("Live Voice Mode", full)
+        self.assertIn("English", full)
+        self.assertIn("Recently Said", full)
+        self.assertIn('"Boo! Nice cape!"', full)
+        self.assertIn("Your Body", full)
+        self.assertIn("wiggles your head or arm", full)
+
+    def test_cues_markdown_loads_all_stage_cues(self):
+        cues = config.load_cues()
+        for expected in ("greeting", "goodbye", "visitor", "silent_visitor", "joke"):
+            self.assertIn(expected, cues)
+            self.assertTrue(cues[expected].startswith("(Stage cue:"))
+            self.assertEqual(config.get_cue(expected), cues[expected])
+
     def test_env_helpers(self):
         with patch.dict(os.environ, {"TEST_ROI": "0.1,0.2,0.5,0.6", "TEST_PARTS": "head, torso"}):
             self.assertEqual(config._env_roi("TEST_ROI"), (0.1, 0.2, 0.5, 0.6))

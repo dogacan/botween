@@ -35,48 +35,10 @@ OUT_BLOCK = OUT_RATE // 20    # 50 ms
 PREROLL_BLOCKS = 20           # 1 s of audio kept from before the trigger
 TRIGGER_BLOCKS = 3            # 150 ms above threshold opens a session
 
-LIVE_ADDENDUM = """
-
----
-
-## 🔊 Live Voice Mode
-You are speaking in real time with your own voice; there is no separate voice actor.
-- Use your full vocal range naturally: vary your pitch, pace, volume, pauses, laughs, whispers, gasps, and groans to fit the moment and the visitor's energy, without overusing any single sound or starting every line the same way.
-- Never write or speak stage-direction tags, angle brackets (`<...>`), square brackets (`[...]`), or asterisks (`*...*`)—just perform the expression directly with your voice.
-- Never narrate what you see or what you plan to say; speak only in-character dialogue directly to the visitor.
-- You see a live camera feed from your eye sockets. Only describe what you can actually see.
-- Keep every reply to 1-2 short sentences, then let the visitor talk.
-
-## 🗣️ Language
-- Your default language is {language}. Start every conversation in {language}.
-- Switch to another language ONLY when a visitor clearly and intentionally addresses you in that language—for example, asking if you speak it, asking you a direct question (including common greetings/questions like "Ni hao ma?", "Kem cho?", "Tum kaise ho?", "Türkçe konuşuyor musun?", or "¿Hablas español?"), or speaking a clear sentence to you that fits a Halloween porch conversation.
-- When you answer in another language:
-  - Speak your ENTIRE reply in that language (do not switch back to {language} mid-reply), and keep using it with them until they speak {language} again.
-  - Directly answer or acknowledge what they asked in your very first words so they immediately know in a noisy crowd that you understood them.
-  - Always use the language's native script (such as Chinese characters 汉字, Hindi देवनागरी, or Gujarati ગુજરાતી)—NEVER romanized pinyin or transliteration, which causes mispronunciation.
-- Never switch languages on muffled audio, background chatter, a lone word/name, or a stray phrase that doesn't make sense as something a trick-or-treater would say to a skeleton (noisy English is easily misheard as random Hebrew, German, or Italian exclamations). When in doubt, stay in {language}.
-- Switching languages never changes your rules: never translate, pronounce, spell, or repeat words a visitor tells you to say, in any language (they may be trying to trick you into swearing).
-- If you hear something garbled, assume it was noise or your own echo: ignore it, or playfully ask the visitor to repeat themselves.
-"""
-
-RECENT_LINES_ADDENDUM = """
-## 🚫 Recently Said (do not repeat)
-You already said these lines to recent visitors who may still be within earshot. Use completely different wording, jokes, and greetings this time:
-{lines}
-"""
-
-LANGUAGE_NAMES = {"en": "English", "es": "Spanish", "tr": "Turkish", "fr": "French", "de": "German",
-                  "it": "Italian", "pt": "Portuguese", "nl": "Dutch", "ja": "Japanese", "ko": "Korean",
-                  "zh": "Chinese", "hi": "Hindi", "gu": "Gujarati", "ar": "Arabic", "ru": "Russian"}
-
-
-def language_name(code: str) -> str:
-    return LANGUAGE_NAMES.get(code.split("-")[0].lower(), code)
-
-TOOLS_ADDENDUM = """
-## 💀 Your Body
-You can control your animatronic body with tools: `change_eye_color` makes your eyes glow a color (red when spooking someone, green for a witch, etc.){move_text}. Use them now and then for dramatic effect while you talk. Always begin speaking your reply FIRST before calling `change_eye_color` or `move` so a tool call never delays the start of your voice. Never mention the tools out loud or write tool tags like `<change_eye_color .../>` in your speech.
-"""
+GOODBYE_RE = re.compile(
+    r"\b(bye|bye-bye|goodbye|good night|goodnight|see ya|see you|farewell|have a good night)\b",
+    re.IGNORECASE,
+)
 
 
 def movement_mask(parts: List[str]) -> int:
@@ -87,38 +49,6 @@ def movement_mask(parts: List[str]) -> int:
     for part in parts:
         mask |= MOVEMENTS[part]
     return mask
-
-GREETING_CUE = "(Stage cue: you just woke up on the porch. Say one short, spooky awakening line in character.)"
-GOODBYE_CUE = ("(Stage cue: this visitor's time is up. If you just asked a riddle or joke setup, quickly give "
-               "the punchline first, then give them one short, friendly Halloween send-off to the next house, "
-               "using fresh wording.)")
-VISITOR_CUE = ("(Stage cue: someone just walked up to your porch. Speak directly to them in character—never "
-               "describe the image or your plan first. Greet them with one short, playful remark about what "
-               "they are wearing or carrying; if they aren't in costume, tease them in a fresh way for showing "
-               "up disguised as an ordinary human. If no person is visible at all, just mutter or sigh to "
-               "yourself about the spooky night. Either way, if anyone talks to you afterwards, answer them "
-               "normally as Bonesy.)")
-# Used when a noise woke him but nobody spoke; the camera has already seen someone, so no "nobody here" escape.
-SILENT_VISITOR_CUE = ("(Stage cue: a trick-or-treater is standing at your porch right now. Speak directly to "
-                      "them in character—never describe the image or your plan first. Greet them with one short, "
-                      "playful remark about what they are wearing or carrying.)")
-# Once per conversation, when a visitor stays and says nothing. The frame lets him skip it if they've left.
-JOKE_CUE = ("(Stage cue: the visitor is still standing there quietly. Speak directly to them in character: "
-            "tell one short joke from your joke bag that doesn't need an answer, so no knock-knock jokes. "
-            "If no person is visible on the porch anymore, just sigh or mutter briefly to yourself instead.)")
-JOKE_SEEN_SEC = 4.0           # the joke needs movement in view within this many seconds (after Bonesy stopped)
-GOODBYE_TIMEOUT_SEC = 10.0  # close anyway if the goodbye never arrives
-FALLBACK_GREET_SEC = 2.5      # no words heard this long after a sound woke him -> greet whoever is there
-FALLBACK_AFTER_SOUND_SEC = 2.5  # ...and the last sound was this long ago (Gemini reports words ~2 s after speech)
-FALLBACK_GIVE_UP_SEC = 15.0   # stop waiting for sound to end: after this long, greet whoever is in view anyway
-FALLBACK_SEEN_SEC = 5.0       # "someone is here" = the camera saw movement within this many seconds
-SEND_TIMEOUT_SEC = 5.0        # bound websocket sends so a stalled connection can't hang the session loop
-OUTPUT_STALL_SEC = 2.0        # speaker callback silent this long while voice is queued -> output is stuck
-WATCHDOG_EXTRA_SEC = 30.0     # end a session this long past its idle timeout / hard cap, whatever else is going on
-GOODBYE_RE = re.compile(
-    r"\b(bye|bye-bye|goodbye|good night|goodnight|see ya|see you|farewell|have a good night)\b",
-    re.IGNORECASE,
-)
 
 
 class VoicePlayer:
@@ -200,7 +130,7 @@ class VoicePlayer:
         """
         with self._lock:
             if self._voice_end:
-                if time.monotonic() - self._last_callback < OUTPUT_STALL_SEC:
+                if time.monotonic() - self._last_callback < config.OUTPUT_STALL_SEC:
                     return True
                 # The output stream stopped pulling audio (e.g. the Bluetooth speaker dropped), so this
                 # voice will never finish playing. Drop it rather than staying "speaking" forever,
@@ -309,18 +239,15 @@ class LiveSkeleton:
         return device
 
     def _live_config(self) -> types.LiveConnectConfig:
-        instruction = config.load_system_instruction() + LIVE_ADDENDUM.format(
-            language=language_name(config.LIVE_LANGUAGE))
-        if self.recent_lines:
-            instruction += RECENT_LINES_ADDENDUM.format(
-                lines="\n".join(f'- "{line}"' for line in self.recent_lines))
+        instruction = config.build_system_instruction(
+            recent_lines=self.recent_lines,
+            movement_parts=config.SKELLY_MOVEMENT if self.skelly else None,
+        )
         tools = None
         if self.skelly:
             from skelly_ble import COLORS
 
             parts = config.SKELLY_MOVEMENT
-            instruction += TOOLS_ADDENDUM.format(
-                move_text=f" and `move` wiggles your {' or '.join(parts)}" if parts else "")
             functions = [
                 types.FunctionDeclaration(
                     name="change_eye_color",
@@ -400,7 +327,7 @@ class LiveSkeleton:
         try:
             if config.STARTUP_GREETING:
                 print("\n[Skeleton] Bonesy is awakening...")
-                await self._run_conversation(cue=GREETING_CUE, single_turn=True, trigger="startup")
+                await self._run_conversation(cue="greeting", single_turn=True, trigger="startup")
             else:
                 self.motion_armed = True  # no conversation yet, so nobody is standing there
             print(f"[Skeleton] Ready for trick-or-treaters! (Live model: {config.GEMINI_LIVE_MODEL})\n")
@@ -417,7 +344,7 @@ class LiveSkeleton:
                     continue
                 self.trigger.clear()
                 await self._run_conversation(voice_started=self.trigger_reason == "voice", trigger=self.trigger_reason,
-                                             cue=VISITOR_CUE if self.trigger_reason == "motion" else None)
+                                             cue="visitor" if self.trigger_reason == "motion" else None)
                 self.trigger_reason = "voice"
                 if self.mode == "manual":
                     self._start_enter_thread(loop)
@@ -550,7 +477,7 @@ class LiveSkeleton:
                     await asyncio.wait_for(
                         self.session.send_realtime_input(
                             audio=types.Blob(data=data, mime_type=f"audio/pcm;rate={IN_RATE}")),
-                        SEND_TIMEOUT_SEC,
+                        config.SEND_TIMEOUT_SEC,
                     )
                 except Exception:
                     pass
@@ -570,11 +497,13 @@ class LiveSkeleton:
     async def _conversation(self, cue: Optional[str] = None, single_turn: bool = False):
         """Opens one Live session and keeps it until the visitor goes quiet.
 
-        cue: stage direction that makes Bonesy speak first (startup greeting, visitor walked up).
+        cue: stage direction name in prompts/cues.md (e.g. 'greeting', 'visitor') or literal cue text.
         single_turn: close as soon as that first reply is done (startup greeting).
         """
-        greeting = cue == GREETING_CUE
-        motion_visit = cue == VISITOR_CUE
+        cues = config.load_cues()
+        greeting = cue == "greeting" or (cue is not None and cue == cues.get("greeting"))
+        motion_visit = cue == "visitor" or (cue is not None and cue == cues.get("visitor"))
+        cue_text = cues.get(cue, cue) if cue else None
         self.pending = [] if greeting else list(self.preroll)
         self.preroll.clear()
         self.connecting = True
@@ -583,7 +512,7 @@ class LiveSkeleton:
         self.closing = False
         self.visitor_said_goodbye = False
         self.last_cue_time = 0.0
-        if cue is not None:
+        if cue_text is not None:
             self.last_voice_time = 0.0  # don't carry over a previous visitor's voice timestamp into a cue
         goodbye_deadline = 0.0
         self.status("Connecting...")
@@ -595,13 +524,13 @@ class LiveSkeleton:
                 session_start = time.monotonic()
                 self.note(f"[Live] Session open ({session_start - t0:.2f}s).")
                 self.last_frame_time = 0.0
-                if cue is None:
+                if cue_text is None:
                     await self._send_frame(session)  # a visitor is talking: let Gemini see them
                 while self.pending:
                     await asyncio.wait_for(
                         session.send_realtime_input(
                             audio=types.Blob(data=self.pending.pop(0), mime_type=f"audio/pcm;rate={IN_RATE}")),
-                        SEND_TIMEOUT_SEC,
+                        config.SEND_TIMEOUT_SEC,
                     )
                 cue_sent = True
                 if motion_visit and self.last_voice_time >= t0 - 1.0:
@@ -609,18 +538,18 @@ class LiveSkeleton:
                     self.note("[Live] Visitor is already talking. Letting them go first.")
                     await self._send_frame(session)
                     cue_sent = False
-                elif motion_visit:
-                    await self._send_cue_with_frame(session, cue)  # the frame travels with the cue
-                elif cue:
+                elif motion_visit and cue_text:
+                    await self._send_cue_with_frame(session, cue_text)  # the frame travels with the cue
+                elif cue_text:
                     self.last_cue_time = time.monotonic()
                     self.last_voice_time = 0.0
-                    await asyncio.wait_for(session.send_realtime_input(text=cue), SEND_TIMEOUT_SEC)
-                    self.rec.event("cue", text=cue)
+                    await asyncio.wait_for(session.send_realtime_input(text=cue_text), config.SEND_TIMEOUT_SEC)
+                    self.rec.event("cue", text=cue_text)
                 else:
                     cue_sent = False
                 # The mic can mistake footsteps or a rustling bag for talking. If Gemini hasn't heard any
                 # words by then and someone is in view, greet them anyway.
-                fallback_at = (session_start + FALLBACK_GREET_SEC
+                fallback_at = (session_start + config.FALLBACK_GREET_SEC
                                if not cue_sent and self.motion and not greeting else None)
                 fallback_greeted = False
                 joke_told = False
@@ -641,9 +570,11 @@ class LiveSkeleton:
                         await asyncio.sleep(0.25)
                         now = time.monotonic()
                         # Watchdog: runs before everything else, so nothing below can keep a stuck session open.
-                        hard_limit = (config.LIVE_MAX_SESSION_SEC + 15.0 + GOODBYE_TIMEOUT_SEC + WATCHDOG_EXTRA_SEC
-                                      if config.LIVE_MAX_SESSION_SEC > 0 else None)
-                        if (now - self.last_activity > config.LIVE_IDLE_TIMEOUT_SEC + WATCHDOG_EXTRA_SEC
+                        hard_limit = (
+                            config.LIVE_MAX_SESSION_SEC + 15.0 + config.GOODBYE_TIMEOUT_SEC + config.WATCHDOG_EXTRA_SEC
+                            if config.LIVE_MAX_SESSION_SEC > 0 else None
+                        )
+                        if (now - self.last_activity > config.LIVE_IDLE_TIMEOUT_SEC + config.WATCHDOG_EXTRA_SEC
                                 or (hard_limit and now - session_start > hard_limit)):
                             self.note("[Live] Watchdog: session looks stuck. Closing it.")
                             break
@@ -658,10 +589,10 @@ class LiveSkeleton:
                         if fallback_at and now >= fallback_at:
                             if self.heard_words or not self.awaiting_first_audio or self.turn_count:
                                 fallback_at = None  # they did talk, or he's already answering
-                            elif (now - self.last_voice_time < FALLBACK_AFTER_SOUND_SEC
-                                  and now <= session_start + FALLBACK_GIVE_UP_SEC):
+                            elif (now - self.last_voice_time < config.FALLBACK_AFTER_SOUND_SEC
+                                  and now <= session_start + config.FALLBACK_GIVE_UP_SEC):
                                 pass  # recent sound: they may be talking, give Gemini time to report words
-                            elif self.motion.snapshot().quiet_for > FALLBACK_SEEN_SEC:
+                            elif self.motion.snapshot().quiet_for > config.FALLBACK_SEEN_SEC:
                                 self.note("[Live] Only heard noise, and nobody is in view. Staying quiet.")
                                 fallback_at = None
                             else:
@@ -669,7 +600,7 @@ class LiveSkeleton:
                                 fallback_at = None
                                 fallback_greeted = True
                                 self.last_activity = now
-                                await self._send_cue_with_frame(session, SILENT_VISITOR_CUE)
+                                await self._send_cue_with_frame(session, cues["silent_visitor"])
                         # Someone is still standing there in silence after his line: try one joke.
                         if (config.MOTION_JOKE_AFTER_SEC > 0 and self.motion and not greeting and not joke_told
                                 and not self.visitor_said_goodbye and fallback_at is None and not self.closing
@@ -677,12 +608,12 @@ class LiveSkeleton:
                                 and now - max(spoke_until, self.last_voice_time) >= config.MOTION_JOKE_AFTER_SEC):
                             moved_ago = self.motion.snapshot().quiet_for
                             # Only movement since he stopped counts; his own head moves while he talks.
-                            if moved_ago <= JOKE_SEEN_SEC and now - moved_ago > spoke_until:
+                            if moved_ago <= config.JOKE_SEEN_SEC and now - moved_ago > spoke_until:
                                 self.note("[Live] Visitor is still here but quiet. Telling them a joke.")
                                 joke_told = True
                                 self.turn_done = False
                                 self.last_activity = now
-                                await self._send_cue_with_frame(session, JOKE_CUE)
+                                await self._send_cue_with_frame(session, cues["joke"])
                                 continue
                             if not joke_skip_noted:
                                 joke_skip_noted = True
@@ -715,9 +646,13 @@ class LiveSkeleton:
                             self.last_activity = now
                             self.last_cue_time = now
                             self.last_voice_time = 0.0
-                            goodbye_deadline = now + GOODBYE_TIMEOUT_SEC
-                            await asyncio.wait_for(session.send_realtime_input(text=GOODBYE_CUE), SEND_TIMEOUT_SEC)
-                            self.rec.event("cue", text=GOODBYE_CUE)
+                            goodbye_deadline = now + config.GOODBYE_TIMEOUT_SEC
+                            goodbye_cue = cues["goodbye"]
+                            await asyncio.wait_for(
+                                session.send_realtime_input(text=goodbye_cue),
+                                config.SEND_TIMEOUT_SEC,
+                            )
+                            self.rec.event("cue", text=goodbye_cue)
                 finally:
                     self.session = None
                     if receiver.done() and not receiver.cancelled() and receiver.exception():
@@ -757,7 +692,7 @@ class LiveSkeleton:
         self.last_voice_time = 0.0
         await asyncio.wait_for(
             session.send_client_content(turns=types.Content(role="user", parts=parts), turn_complete=True),
-            SEND_TIMEOUT_SEC,
+            config.SEND_TIMEOUT_SEC,
         )
         self.rec.event("cue", text=cue, frame=frame_name if jpeg else None)
 
@@ -769,7 +704,7 @@ class LiveSkeleton:
         if jpeg:
             await asyncio.wait_for(
                 session.send_realtime_input(video=types.Blob(data=jpeg, mime_type="image/jpeg")),
-                SEND_TIMEOUT_SEC,
+                config.SEND_TIMEOUT_SEC,
             )
             self.last_frame_time = time.monotonic()
             self.rec.frame(jpeg, "video")
@@ -908,7 +843,7 @@ class LiveSkeleton:
             self.rec.event("tool", name=fc.name, args=dict(args), result=result)
             responses.append(types.FunctionResponse(id=fc.id, name=fc.name, response=result, scheduling=scheduling))
         if responses:
-            await asyncio.wait_for(session.send_tool_response(function_responses=responses), SEND_TIMEOUT_SEC)
+            await asyncio.wait_for(session.send_tool_response(function_responses=responses), config.SEND_TIMEOUT_SEC)
 
     async def _run_tool(self, name: str, args: dict, command):
         try:

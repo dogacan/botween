@@ -143,7 +143,9 @@ python3 skeleton.py --mode auto
 
 ## 🎭 Customizing the Skeleton Persona & Jokes
 
-The skeleton's personality, costume observation instructions, and voice-acting directions are in **[`prompt.md`](prompt.md)**.
+The skeleton's personality, costume observation instructions, voice-acting directions, and stage cues live in markdown files:
+* **Base Persona**: **[`prompt.md`](prompt.md)** defines Bonesy's core character, visual observation rules, and safety guardrails.
+* **Live Addendums & Stage Cues**: **[`prompts/`](prompts/)** contains **[`live_addendum.md`](prompts/live_addendum.md)** (voice & language rules), **[`recent_lines_addendum.md`](prompts/recent_lines_addendum.md)** (anti-repetition), **[`tools_addendum.md`](prompts/tools_addendum.md)** (eye/body tool instructions), and **[`cues.md`](prompts/cues.md)** (`greeting`, `visitor`, `silent_visitor`, `joke`, and `goodbye` stage directions).
 * **Jokes**: Bonesy's jokes live in **[`jokes.json`](jokes.json)**, grouped by category (a plain list works too). Each visitor session picks `JOKES_PER_SESSION` (default 5) at random and drops them into the `{{JOKES}}` spot in `prompt.md`, so Bonesy doesn't tell everyone the same one.
 * **Expressive Live Voice**: Gemini Live adapts its vocal delivery, whispers, gasps, laughs, groans, and comedic pauses naturally to each visitor without needing inline `<tag>` markup.
-* **Live Reload**: `prompt.md` and `jokes.json` are re-read for every visitor session, so you can edit them while the script is running without restarting!
+* **Live Reload**: `prompt.md`, `prompts/*.md`, and `jokes.json` are re-read for every visitor session, so you can edit them while the script is running without restarting!

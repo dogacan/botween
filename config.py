@@ -1,7 +1,9 @@
 import json
 import os
 import random
+import re
 from pathlib import Path
+from typing import Iterable, Optional
 from dotenv import load_dotenv
 
 # Load .env file from project root if present
@@ -13,12 +15,27 @@ GEMINI_LIVE_MODEL = os.getenv("GEMINI_LIVE_MODEL", "gemini-3.8-live")
 
 # Project Directories
 BASE_DIR = Path(__file__).parent.resolve()
+PROMPTS_DIR = BASE_DIR / "prompts"
 
-# Prompt Configuration
+# Prompt & Cue Markdown Files
 PROMPT_FILE = BASE_DIR / os.getenv("PROMPT_FILE", "prompt.md")
+LIVE_ADDENDUM_FILE = PROMPTS_DIR / "live_addendum.md"
+RECENT_LINES_ADDENDUM_FILE = PROMPTS_DIR / "recent_lines_addendum.md"
+TOOLS_ADDENDUM_FILE = PROMPTS_DIR / "tools_addendum.md"
+CUES_FILE = PROMPTS_DIR / "cues.md"
 JOKES_FILE = BASE_DIR / os.getenv("JOKES_FILE", "jokes.json")
 JOKES_PER_SESSION = int(os.getenv("JOKES_PER_SESSION", "5"))
 JOKES_PLACEHOLDER = "{{JOKES}}"
+
+LANGUAGE_NAMES = {
+    "en": "English", "es": "Spanish", "tr": "Turkish", "fr": "French", "de": "German",
+    "it": "Italian", "pt": "Portuguese", "nl": "Dutch", "ja": "Japanese", "ko": "Korean",
+    "zh": "Chinese", "hi": "Hindi", "gu": "Gujarati", "ar": "Arabic", "ru": "Russian",
+}
+
+
+def language_name(code: str) -> str:
+    return LANGUAGE_NAMES.get(code.split("-")[0].lower(), code)
 
 
 def load_jokes() -> list[str]:
@@ -56,17 +73,77 @@ def pick_jokes() -> str:
     return "\n".join(f"- {joke}" for joke in picked)
 
 
+def _read_md(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8").strip()
+    except Exception as e:
+        print(f"[Config] Warning: Failed to read {path}: {e}")
+        return ""
+
+
 def load_system_instruction() -> str:
     """Loads the skeleton prompt from prompt.md, filling {{JOKES}} with a random set from jokes.json."""
     if PROMPT_FILE.exists():
-        try:
-            prompt = PROMPT_FILE.read_text(encoding="utf-8").strip()
+        prompt = _read_md(PROMPT_FILE)
+        if prompt:
             if JOKES_PLACEHOLDER in prompt:
                 prompt = prompt.replace(JOKES_PLACEHOLDER, pick_jokes())
             return prompt
-        except Exception as e:
-            print(f"[Config] Warning: Failed to read {PROMPT_FILE}: {e}")
     return "You are Bonesy, an enchanted, witty talking skeleton for Halloween."
+
+
+def build_system_instruction(
+    recent_lines: Optional[Iterable[str]] = None,
+    movement_parts: Optional[list[str]] = None,
+) -> str:
+    """Assembles the full Live system instruction from prompt.md and the markdown addendums in prompts/."""
+    instruction = load_system_instruction()
+
+    live_addendum = _read_md(LIVE_ADDENDUM_FILE)
+    if live_addendum:
+        instruction += "\n\n" + live_addendum.format(language=language_name(LIVE_LANGUAGE))
+
+    recent = list(recent_lines or [])
+    if recent:
+        recent_addendum = _read_md(RECENT_LINES_ADDENDUM_FILE)
+        if recent_addendum:
+            lines_text = "\n".join(f'- "{line}"' for line in recent)
+            instruction += "\n\n" + recent_addendum.format(lines=lines_text)
+
+    if movement_parts is not None:
+        tools_addendum = _read_md(TOOLS_ADDENDUM_FILE)
+        if tools_addendum:
+            move_text = f" and `move` wiggles your {' or '.join(movement_parts)}" if movement_parts else ""
+            instruction += "\n\n" + tools_addendum.format(move_text=move_text)
+
+    return instruction
+
+
+def load_cues() -> dict[str, str]:
+    """Parses `## <cue_name>` sections from prompts/cues.md into a dictionary of stage cues."""
+    raw = _read_md(CUES_FILE)
+    if not raw:
+        return {}
+    raw = re.sub(r"<!--.*?-->", "", raw, flags=re.DOTALL)
+    cues: dict[str, str] = {}
+    current_key: Optional[str] = None
+    buffer: list[str] = []
+    for line in raw.splitlines():
+        if line.startswith("## "):
+            if current_key and buffer:
+                cues[current_key] = " ".join(" ".join(buffer).split())
+            current_key = line[3:].strip()
+            buffer = []
+        elif current_key is not None and line.strip():
+            buffer.append(line.strip())
+    if current_key and buffer:
+        cues[current_key] = " ".join(" ".join(buffer).split())
+    return cues
+
+
+def get_cue(name: str) -> str:
+    """Returns a named stage cue from prompts/cues.md."""
+    return load_cues().get(name, "")
 
 
 # Hardware & Devices
@@ -123,6 +200,17 @@ RECORD_DIR = BASE_DIR / os.getenv("RECORD_DIR", "recordings")
 # line moves the skeleton right when the camera is learning what the empty porch looks like.
 STARTUP_GREETING = _env_bool("STARTUP_GREETING", "false")
 LIVE_KEEPALIVE_LEVEL = float(os.getenv("LIVE_KEEPALIVE_LEVEL", "0.001"))  # faint noise keeps BT speaker awake
+
+# Live Session Timing, Fallback & Watchdogs
+JOKE_SEEN_SEC = float(os.getenv("JOKE_SEEN_SEC", "4.0"))              # movement needed within this window for idle joke
+GOODBYE_TIMEOUT_SEC = float(os.getenv("GOODBYE_TIMEOUT_SEC", "10.0"))  # close anyway if cap goodbye never arrives
+FALLBACK_GREET_SEC = float(os.getenv("FALLBACK_GREET_SEC", "2.5"))    # no words heard after sound -> greet whoever is in view
+FALLBACK_AFTER_SOUND_SEC = float(os.getenv("FALLBACK_AFTER_SOUND_SEC", "2.5"))
+FALLBACK_GIVE_UP_SEC = float(os.getenv("FALLBACK_GIVE_UP_SEC", "15.0"))
+FALLBACK_SEEN_SEC = float(os.getenv("FALLBACK_SEEN_SEC", "5.0"))
+SEND_TIMEOUT_SEC = float(os.getenv("SEND_TIMEOUT_SEC", "5.0"))        # bound websocket sends
+OUTPUT_STALL_SEC = float(os.getenv("OUTPUT_STALL_SEC", "2.0"))        # speaker callback stall timeout
+WATCHDOG_EXTRA_SEC = float(os.getenv("WATCHDOG_EXTRA_SEC", "30.0"))   # hard watchdog past idle/cap limits
 
 
 def _env_roi(name: str):
